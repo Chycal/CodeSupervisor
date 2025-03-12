@@ -27,10 +27,101 @@ import {
 	TransportKind,
 	Trace
 } from 'vscode-languageclient/node';
-
+import * as vscode from 'vscode';
+import * as fs from 'fs';
+import { DiagnosticsHandler, DiagnosticProvider } from "./diagnostics";
+import { SecurityAnalyzer } from "./analyzer";
+import { SecurityIssue } from './types';
 // 导入Ghost Text提供程序
 import { GhostTextProvider } from './ghostText';
 
+// ------------------新增函数-用于创建panel--------------------------
+//#region 
+// 全局变量的panel
+const panel:Record<string, vscode.WebviewPanel>={};
+function getWebviewContent(context: vscode.ExtensionContext, panel: vscode.WebviewPanel): string {
+    // 获取 CSS 文件路径
+    const cssPath = vscode.Uri.file(path.join(context.extensionPath, 'client/src/assets', 'dashboard.css'));
+    const cssUri = panel.webview.asWebviewUri(cssPath);
+
+    // 获取 HTML 文件路径
+    const htmlPath = vscode.Uri.file(path.join(context.extensionPath, 'client/src/view', 'dashboard.html'));
+    // const htmlUri = panel.webview.asWebviewUri(htmlPath);
+
+    // 读取 HTML 文件内容
+    let htmlContent = fs.readFileSync(htmlPath.fsPath, 'utf-8');
+
+    // 打印 CSS 和 HTML URI
+    //console.log('CSS URI:', cssUri.toString());
+    //console.log('HTML URI:', htmlPath.fsPath);
+
+    // 将 CSS 路径嵌入到 HTML 中
+    htmlContent = htmlContent.replace('<link rel="stylesheet" href="dashboard.css">', `<link rel="stylesheet" href="${cssUri}">`);
+    //console.log('替换后的 HTML 内容:', htmlContent);
+    
+    return htmlContent;
+}
+
+// 加载数据,将漏洞数据发送给webview
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function loadData(panel: vscode.WebviewPanel, vulnerabilities: any, score: number) {
+    // 发送包含漏洞数据和评分的刷新命令
+    panel.webview.postMessage({
+        command: 'refresh',
+        issues: vulnerabilities,
+        score: score,
+    });
+}
+
+// 定位到代码行
+function gotoLine(line: number) {
+    const editor = vscode.window.activeTextEditor;
+    if (editor) {
+        const position = new vscode.Position(line - 1, 0);
+        editor.revealRange(new vscode.Range(position, position));
+    }
+}
+
+// 用于分析函数打开自己的panel
+function openPanel(context: vscode.ExtensionContext,uri:string){
+    console.log('正在创建 Webview...');
+    if(panel[uri]){
+        vscode.window.showWarningMessage(
+            "CodeSupervisior: 当前文件面板已存在"
+          );
+          return;
+    }
+    //创建Webview面板
+    panel[uri] = vscode.window.createWebviewPanel(
+        'securityDashboard', // 面板ID
+        '安全看板', // 面板标题
+        vscode.ViewColumn.Beside, // 显示位置
+        {
+            enableScripts: true, // 启用 JavaScript
+            localResourceRoots: [vscode.Uri.file(path.join(context.extensionPath, 'client/src'))],// 允许加载本地资源
+            retainContextWhenHidden: true, // 关闭时保留状态
+        }
+    );
+    console.log('Webview 已创建');
+    // 加载HTML内容
+    panel[uri].webview.html = getWebviewContent(context, panel[uri]);
+
+    // 监听Webview消息
+    panel[uri].webview.onDidReceiveMessage(message => {
+        switch (message.command) {
+            case 'refresh':
+                //loadData(panel);
+                break;
+            case 'gotoLine':
+                gotoLine(message.line);
+                break;
+        }
+    });
+}
+//#endregion
+// ------------------END----------------------------------------------
+
+// 语言服务器
 let client: LanguageClient;
 
 // LLM提供者状态栏
@@ -39,7 +130,9 @@ let llmProviderStatusBar: StatusBarItem;
 export function activate(context: ExtensionContext) {
 	// 添加日志输出
 	console.log('安全编码助手扩展已激活');
-	
+
+	// -----------------------------语言服务器-----------------------
+	// #region
 	// The server is implemented in node
 	const serverModule = context.asAbsolutePath(
 		path.join('server', 'out', 'server.js')
@@ -460,6 +553,165 @@ export function activate(context: ExtensionContext) {
 			})
 		);
 	});
+	// #endregion
+	// -----------------------------END----------------------------- 
+
+	// ---------------------------提供非LSP的安全检查功能-------------
+	// 包括工作区全量检测和单文件全量检测
+	// #region
+	// 初始化工具
+    const diagnosticsHandler = new DiagnosticsHandler();
+    const diagnosticProvider = new DiagnosticProvider(diagnosticsHandler);
+    const securityAnalyzer = new SecurityAnalyzer();
+
+	// 类型注册
+	context.subscriptions.push(
+		vscode.languages.registerCodeActionsProvider(
+			["javascript", "typescript", "python", "java", "cpp"],
+			diagnosticProvider,
+			{
+			providedCodeActionKinds: [vscode.CodeActionKind.QuickFix],
+			}
+		)
+	);
+	// 单文件全量检测功能
+    const fullCode = vscode.commands.registerCommand('security-assistant.fullCode',async function () {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            vscode.window.showWarningMessage(
+              "CodeSupervisior: 请打开一个文件"
+            );
+            return;
+        }
+
+		if(editor){
+			try {
+                await vscode.window.withProgress(
+                  {
+                    location: vscode.ProgressLocation.Notification,
+                    title: "CodeSupervisior: 检测开始，请勿在检测期间更改代码",
+                    cancellable: false,
+                  },
+                  async (progress) => {
+                    progress.report({ increment: 0 });
+        
+                    const document = editor.document;
+                    const code = document.getText();
+                    const language = document.languageId;
+                    const filename = document.fileName;
+                    // 清除已有分析
+                    diagnosticsHandler.clearDiagnostics();
+        
+                    // 分析代码
+                    const result = await securityAnalyzer.analyzeCode(code, language,filename);
+        
+                    progress.report({ increment: 100 });
+        
+                    // 更新分析结果
+                    diagnosticsHandler.updateDiagnostics(document, result.issues);
+
+                    // 将分析结果上传到面板中
+                    openPanel(context,document.uri.toString());
+                    loadData(panel[document.uri.toString()]!,result.issues,80);
+                  }
+                );
+              } catch (error) {
+                console.error("分析出错:", error);
+                vscode.window.showErrorMessage(
+                  `CodeSupervisior: - ${
+                    error instanceof Error ? error.message : "未知错误"
+                  }`
+                );
+              }
+            
+	    }
+        
+    });
+	// 工作区文件全量检测
+    const workspace_fullcode = vscode.commands.registerCommand('security-assistant.workSpaceFullCode',async function () {
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        const workspaceURI = vscode.workspace.workspaceFile;
+        if (!workspaceFolders) {
+            vscode.window.showWarningMessage(
+            "CodeSupervisior: 请打开一个工作区"
+            );
+            return;
+        }
+        if(!workspaceURI){
+            vscode.window.showWarningMessage(
+            "CodeSupervisior: 请打开一个工作区"
+            );
+            return;
+        }
+        try {
+            await vscode.window.withProgress(
+            {
+            location: vscode.ProgressLocation.Notification,
+            title: "CodeSupervisior: 检测开始，请勿在检测期间更改代码",
+            cancellable: true,
+            },
+            async (progress, token) => {
+            const allIssues:SecurityIssue[]=[];
+            // Find all supported files
+            const files = await vscode.workspace.findFiles(
+                "{**/*.js,**/*.ts,**/*.py,**/*.java,**/*.cpp}",
+                "{**/node_modules/**,**/dist/**,**/build/**,**/.git/**}"
+            );
+
+            const totalFiles = files.length;
+            let processedFiles = 0;
+
+            for (const file of files) {
+                if (token.isCancellationRequested) {
+                vscode.window.showInformationMessage(
+                    "CodeSupervisior: 分析取消"
+                );
+                return;
+                }
+
+                const document = await vscode.workspace.openTextDocument(file);
+                const code = document.getText();
+                const language = document.languageId;
+                const filename = document.fileName;
+                progress.report({
+                increment: (1 / totalFiles) * 100,
+                message: `正在分析 ${vscode.workspace.asRelativePath(
+                    file
+                )} (${++processedFiles}/${totalFiles})`,
+                });
+
+                try {
+                const result = await securityAnalyzer.analyzeCode(
+                    code,
+                    language,
+                    filename
+                );
+                diagnosticsHandler.updateDiagnostics(document, result.issues);
+                allIssues.push(...result.issues);
+                } catch (error) {
+                console.error(`分析失败 ${file.fsPath}:`, error);
+                // Continue with next file
+                }
+            }
+            //上传至面板
+            openPanel(context,workspaceURI.toString());
+            loadData(panel[workspaceURI.toString()],allIssues,80);
+            }
+        );
+        } catch (error) {
+        console.error("工作区分析错误:", error);
+        vscode.window.showErrorMessage(
+            `CodeSupervisior: 工作区分析失败 - ${
+            error instanceof Error ? error.message : "未知错误"
+            }`
+        );
+        }
+    });
+	// 注册
+	context.subscriptions.push(fullCode);
+	context.subscriptions.push(workspace_fullcode);
+	//#endregion
+	// -----------------------------END------------------------------
 }
 
 // 更新LLM提供者状态栏

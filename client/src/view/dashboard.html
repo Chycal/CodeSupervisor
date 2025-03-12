@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <!-- 在HTML中，路径中的分隔符应该使用正斜杠 / -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+   <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+    <div></div>
+    <center><h1>安全看板</h1></center>
+    <div id="security-rating"> 
+        <h3>安全评分</h3>
+        <span class="star" id="starRating">⭐️⭐️⭐️⭐️⭐️</span>
+        <span class="score-text" id="scoreText">(85/100)</span>
+    </div>
+    <div id="vulnerability-number">
+        <div class="vulnerability-number-header">
+            <h3>漏洞数目<h3>
+        </div>
+        <div class="vulnerability-chart-container">
+            <canvas id="vulnerabilityChart"></canvas>
+        </div>
+    </div>
+    <div id="vulnerability-content">
+        <div class="list-header">
+            <h3>漏洞分布</h3>
+            <div class="checkbox-container">
+                <label>全选<input type="checkbox" id="selectAllCheckbox"></label>
+            </div>
+        </div>
+        <ul id="vulnerabilityList" class="vulnerability-list"></ul>
+        <div class="button-container">
+            <button id="repairButton" class="repair-button">一键修复</button>
+        </div>
+    </div>
+
+
+
+    <script>
+        const vscode = acquireVsCodeApi();
+        // 获取数据并渲染页面
+
+        function updateStarRating(score) {
+            const fullStars = Math.floor((score / 100) * 5); // 计算满星数量
+            let starString = '';
+            
+            for (let i = 0; i < fullStars; i++) {
+                starString += '⭐️'; // 根据满星数量填充星星
+            }
+            
+            document.getElementById('starRating').innerText = starString; // 更新星级评价
+            document.getElementById('scoreText').innerText = ` (${score}/100)`; // 更新分数显示
+        }
+
+        function updateVulnerabilityChart(vulnerabilityNumber) {
+            const ctx = document.getElementById('vulnerabilityChart').getContext('2d');
+
+            // 如果图表已经存在，则销毁旧图表以避免重复渲染
+            if (window.myBarChart) {
+                window.myBarChart.destroy();
+            }
+
+            window.myBarChart = new Chart(ctx, {
+                type: 'bar', // 使用 'bar' 类型，然后通过 options 设置为水平条形图
+                data: {
+                    labels: ['漏洞数目'], // 仅有一个标签，因为我们只绘制一个条目
+                    datasets: [
+                        {
+                            label: '严重',
+                            data: [vulnerabilityNumber.critical], // 严重数据
+                            backgroundColor: '#000000', // 黑色
+                            stack: 'Stack 0', // 将数据集堆叠在一起
+                        },
+                        {
+                            label: '高危',
+                            data: [vulnerabilityNumber.high], // 高危数据
+                            backgroundColor: '#FF6347', // 红色
+                            stack: 'Stack 0', // 将数据集堆叠在一起
+                        },
+                        {
+                            label: '中危',
+                            data: [vulnerabilityNumber.medium], // 中危数据
+                            backgroundColor: '#FFD700', // 黄色
+                            stack: 'Stack 0', // 将数据集堆叠在一起
+                        },
+                        {
+                            label: '低危',
+                            data: [vulnerabilityNumber.low], // 低危数据
+                            backgroundColor: '#32CD32', // 绿色
+                            stack: 'Stack 0', // 将数据集堆叠在一起
+                        },
+                    ]
+                },
+                options: {
+                    indexAxis: 'y', // 将 y 轴设置为主轴，使条形图水平显示
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            stacked: true, // 启用 x 轴的堆叠
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0 // 避免小数点
+                            },
+                            grid: {
+                                display: false, // 隐藏 x 轴网格线
+                                // lineWidth: 0.2, // 设置 x 轴网格线宽度
+                            },
+                            border: {
+                                display:false,
+                                width: 0, // 设置 x 轴线宽度
+                            }
+                        },
+                        y: {
+                            stacked: true, // 启用 y 轴的堆叠
+                            offset: true,
+                            grid: {
+                                display: false, // 隐藏 x 轴网格线
+                                //lineWidth: 0.2, // 设置 x 轴网格线宽度
+                            },
+                            border: {
+                                display:false,
+                                width: 0, // 设置 x 轴线宽度
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'right', // 将图例放在右侧
+                            labels: {
+                                boxWidth: 20, // 图例颜色块的宽度
+                                padding: 10, // 图例项之间的间距
+                            },
+                        },
+                        datalabels: {
+                            anchor: 'center', // 数据标签显示在柱子中间
+                            align: 'center', // 数据标签居中对齐
+                            color: '#000000', // 数据标签颜色
+                            font: {
+                                size: 12, // 数据标签字体大小
+                                weight: 'bold', // 数据标签字体加粗
+                            },
+                            formatter: (value) => {
+                                return value; // 直接显示数据值
+                            },
+                            display:true,
+                        }
+                    },
+                    layout: {
+                        padding: {
+                            right: 20, // 为图例留出右侧空间
+                        }
+                    },
+                    // 设置柱子宽度
+                    elements: {
+                        bar: {
+                            barThickness: 8, // 固定柱子宽度为 20 像素
+                            maxBarThickness: 20, // 最大柱子宽度
+                            minBarLength: 10, // 最小柱子长度
+                        }
+                    },
+                    barPercentage: 0.8, // 控制柱子的宽度比例
+                    categoryPercentage: 0.6, // 控制柱子的高度比例
+                }
+            });
+        }
+
+        function addVulnerability(vuln) {
+            const listItem = document.createElement('li');
+            listItem.className = 'vulnerability-item';
+            //处理message
+            const parts = vuln.message.split("\n");
+            let description = "";
+            let fix = "";
+            // 分离描述和修复建议
+            const descStart = vuln.message.indexOf("Description: ");
+            const fixStart = vuln.message.indexOf("Recommendation: ");
+
+            if (descStart !== -1) {
+            description = vuln.message
+                .slice(
+                descStart + "Description: ".length,
+                fixStart !== -1 ? fixStart : undefined
+                )
+                .trim();
+            }
+
+            if (fixStart !== -1) {
+            fix = vuln.message.slice(fixStart + "Recommendation: ".length).trim();
+            }
+
+            // 创建一个容器来容纳严重性、标题和建议
+            const contentContainer = document.createElement('div');
+            contentContainer.className = 'content-container';
+            listItem.appendChild(contentContainer);
+
+
+            const titleContainer = document.createElement('div');
+            titleContainer.className = 'title-container';
+            contentContainer.appendChild(titleContainer);
+
+            // 严重性点
+            const severityDot = document.createElement('div');
+            severityDot.className = `severity-dot ${vuln.severity}-severity`;
+            titleContainer.appendChild(severityDot);
+
+            // 标题容器
+            const titleDiv = document.createElement('div');
+            titleDiv.className = 'title';
+            titleDiv.innerHTML = `<strong>${parts[0]}</strong><br> ${vuln.filename}:  ${vuln.line}行`;
+            titleContainer.appendChild(titleDiv);
+
+            // 建议容器
+            const suggestionDiv = document.createElement('div');
+            suggestionDiv.className = 'suggestion';
+            suggestionDiv.innerHTML = `<p class="fix-suggestion">${fix}</p>`;
+            contentContainer.appendChild(suggestionDiv);
+
+            // 勾选框
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'item-checkbox';
+            listItem.appendChild(checkbox);  // 直接添加到 listItem 中，而不是 contentContainer
+
+            document.getElementById('vulnerabilityList').appendChild(listItem);
+        }
+
+        function updateVulnerabilityList(vulnerabilities,filename){
+            document.getElementById('vulnerabilityList').innerHTML = ''; // 清空列表，避免重复添加
+            // 添加所有漏洞条目
+            vulnerabilities.forEach((vuln) => addVulnerability(vuln, filename));
+
+            // 全选/取消全选功能
+            document.getElementById('selectAllCheckbox').addEventListener('change', function() {
+                const checkboxes = document.querySelectorAll('.item-checkbox');
+                checkboxes.forEach(cb => cb.checked = this.checked);
+            });
+
+            // 一键修复功能（这里只是一个示例，实际逻辑需要根据需求实现）
+            document.getElementById('repairButton').addEventListener('click', function() {
+                const selectedCheckboxes = document.querySelectorAll('.item-checkbox:checked');
+                if (selectedCheckboxes.length > 0) {
+                    alert('已选择 ' + selectedCheckboxes.length + ' 个漏洞进行修复！');
+                    // 实际修复逻辑应该在这里实现
+                } else {
+                    alert('请至少选择一个漏洞进行修复！');
+                }
+            });
+        }
+
+        // 暂时不用
+        function loadData(){
+            const currentScore = 85;
+            const vulnerabilityNumber = {
+                high: 15, // 高危漏洞数量
+                medium: 25, // 中危漏洞数量
+                low: 60, // 低危漏洞数量
+            };
+            const vulnerabilities = [
+                { severity: 'high', title: 'SQL注入风险', line: 2, fileMapping:'example1.py',suggestion: '建议：对用户输入进行严格过滤...' },
+                { severity: 'medium', title: 'XSS攻击风险', line: 5, fileMapping:'example1.py',suggestion: '建议：对输出进行编码...' },
+                { severity: 'low', title: '信息泄露风险', line: 10,fileMapping:'example1.py', suggestion: '建议：限制敏感信息的访问...' },
+            ];
+
+            updateStarRating(currentScore);
+            updateVulnerabilityChart(vulnerabilityNumber);
+            updateVulnerabilityList(vulnerabilities);
+        }
+
+
+
+        // 监听VS Code消息
+        window.addEventListener('message', event => {
+            const message = event.data;
+            switch (message.command) {
+                case 'refresh':
+                    console.log("收到来自vscode的讯息");
+                    // 直接使用传入的数据更新页面
+                    updateStarRating(message.score);
+                    updateVulnerabilityChart({
+                        critical: message.issues.filter(v => v.severity === 'critical').length,
+                        high: message.issues.filter(v => v.severity === 'high').length,
+                        medium: message.issues.filter(v => v.severity === 'medium').length,
+                        low: message.issues.filter(v => v.severity === 'low').length
+                    });
+                    updateVulnerabilityList(message.issues);
+                    break;
+                case 'gotoLine':
+                    gotoLine(message.line);
+                    break;
+            }
+        });
+
+        
+        //loadData();   // 初始化加载数据
+        console.log("初始化完成");
+    </script>
+</body>
+</html>

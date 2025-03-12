@@ -9,7 +9,11 @@
 		"url": "https://github.com/Microsoft/vscode-extension-samples"
 	},
 	"publisher": "vscode-samples",
-	"categories": ["Programming Languages", "Linters", "Snippets"],
+	"categories": [
+		"Programming Languages",
+		"Linters",
+		"Snippets"
+	],
 	"keywords": [
 		"multi-root ready",
 		"security",
@@ -54,6 +58,14 @@
 				"command": "security-assistant.importCustomKnowledge",
 				"title": "导入自定义安全知识库",
 				"category": "安全编码助手"
+			},
+			{
+				"command": "security-assistant.workSpaceFullCode",
+				"title": "当前工作区完整代码安全性检查"
+			},
+			{
+				"command": "security-assistant.fullCode",
+				"title": "当前文档完整代码安全性检查"
 			}
 		],
 		"menus": {
@@ -62,6 +74,14 @@
 					"command": "security-assistant.analyzeCode",
 					"when": "editorTextFocus",
 					"group": "navigation"
+				},
+				{
+				  "command": "security-assistant.workSpaceFullCode",
+				  "title": "当前工作区完整代码安全性检查"
+				},
+				{
+				  "command": "security-assistant.fullCode",
+				  "title": "当前文档完整代码安全性检查"
 				}
 			]
 		},
@@ -85,13 +105,24 @@
 				},
 				"securityAssistant.supportedLanguages": {
 					"type": "array",
-					"default": ["javascript", "typescript", "python", "java", "php", "ruby", "plaintext"],
+					"default": [
+						"javascript",
+						"typescript",
+						"python",
+						"java",
+						"php",
+						"ruby",
+						"plaintext"
+					],
 					"description": "支持的编程语言"
 				},
 				"securityAssistant.llmProvider": {
 					"type": "string",
 					"default": "deepseek",
-					"enum": ["openai", "deepseek"],
+					"enum": [
+						"openai",
+						"deepseek"
+					],
 					"enumDescriptions": [
 						"使用OpenAI API",
 						"使用DeepSeek API"
@@ -133,5 +164,10 @@
 		"mocha": "^10.3.0",
 		"typescript": "^5.8.2",
 		"typescript-eslint": "^8.26.0"
+	},
+	"dependencies": {
+		"@langchain/openai": "^0.4.4",
+		"axios": "^1.8.3",
+		"openai": "^4.87.3"
 	}
 }

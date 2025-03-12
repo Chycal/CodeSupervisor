@@ -1,0 +1,225 @@
+body {
+    font-family: Arial, sans-serif;
+    padding: 10px;
+    margin-left:20px;
+    width: 320px;
+    background-color: var(--vscode-editor-background);
+    color: var(--vscode-editor-foreground);
+}
+
+/* 安全评分 */
+#security-rating h3{
+    display: inline-block; /* 确保只有h3标签有背景色，不影响其他元素 */
+    /* background-color: #acfcac; 浅绿色背景 */
+    padding: 5px 10px;
+    border-radius: 5px;
+}
+
+/* 漏洞数目 */
+.vulnerability-number-header h3 {
+    display: inline-block; /* 确保只有h3标签有背景色，不影响其他元素 */
+    /* background-color: #acfcac; 浅黄色背景 */
+    padding: 5px 10px;
+    margin:0;
+    border-radius: 5px;
+}
+
+/* 漏洞分布 */
+.list-header h3 {
+    display: inline-block; /* 确保只有h3标签有背景色，不影响其他元素 */
+    /* background-color: #acfcac; 浅蓝色背景 */
+    padding: 5px 10px;
+    border-radius: 5px;
+    margin-bottom: -5px;
+}
+
+#security-rating .star {
+    color: #f3e812; /* 星星颜色 */
+    font-size: 1.5em; /* 字体大小 */
+}
+
+/* 分数显示样式 */
+#security-rating .score-text {
+    margin-left: 10px;
+    font-size: 1.2em;
+}
+
+#vulnerability-number {
+    display: flex;
+    flex-direction: column; 
+}
+
+#vulnerability-number vulnerability-chart-container {
+    position: relative; /* 为图例定位提供参考 */
+    /* margin:0 auto; */
+    /* height: 20px; */
+}
+
+#vulnerability-content .list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: -5px;
+}
+
+#vulnerability-content .vulnerability-list {
+    list-style-type: none;
+    padding: 10px;
+}
+/* dashboard.css */
+.vulnerability-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    /* position:relative; */
+}
+
+.content-container {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    margin-right: 10px;
+}
+
+/* 设置标题容器为水平布局 */
+.title-container {
+    display: flex;
+    align-items: center; /* 垂直居中对齐 */
+}
+
+.severity-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 10px;
+    margin-top:1px;
+}
+
+.critical-severity {
+    background-color: black;
+}
+.high-severity {
+    background-color: red;
+}
+.medium-severity {
+    background-color: orange;
+}
+.low-severity {
+    background-color: green;
+}
+
+.title{
+    margin-top: 2px;
+}
+
+
+.item-checkbox {
+    margin-left: auto;
+    margin-right: 10px;
+    size: 30px;
+}
+
+.checkbox-container{
+    margin-top:16px;
+    margin-right: 10px;
+}
+
+#vulnerability-content .select-all-checkbox { 
+    margin-left: 10px; 
+    size: 30px;
+    margin-top: 10px;
+}
+
+#vulnerability-content {
+    margin-top: -10px;
+    display: flex;
+    flex-direction: column; /* 如果希望内容垂直排列 */
+}
+
+/* .src{
+    margin: top 6px bottom -10px;
+} */
+
+.button-container {
+    display: flex; /* 使该容器成为一个flex容器 */
+    justify-content: flex-end; /* 将其直接子元素（即按钮）在水平方向上靠右对齐 */
+    margin-top: auto; /* 如果希望按钮始终位于容器底部，可以使用这个属性 */
+}
+
+/* #vulnerability-content  {
+    margin-top: 6px;
+    padding: 10px 20px;
+    background-color:rgb(100, 166, 253);
+    color: rgb(0, 0, 0);
+    border: none;
+    border-radius: 5px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transition: background-color 0.3s ease;
+    cursor: pointer;
+}
+
+#vulnerability-content .repair-button:hover {
+    background-color: #0056b3;
+}
+
+#vulnerability-content .repair-button:active {
+    background-color: #004080;
+} */
+
+.repair-button {
+    --color: #00A97F;
+    padding: 0.8em 1.7em;
+    background-color: transparent;
+    border-radius: .3em;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+    transition: .5s;
+    font-weight: 400;
+    font-size: 14px;
+    border: 1px solid;
+    font-family: inherit;
+    text-transform: uppercase;
+    color: var(--color);
+    z-index: 1;
+   }
+   
+   .repair-button::before, .repair-button::after {
+    content: '';
+    display: block;
+    width: 50px;
+    height: 50px;
+    transform: translate(-50%, -50%);
+    position: absolute;
+    border-radius: 50%;
+    z-index: -1;
+    background-color: var(--color);
+    transition: 1s ease;
+   }
+   
+   .repair-button::before {
+    top: -1em;
+    left: -1em;
+   }
+   
+   .repair-button::after {
+    left: calc(100% + 1em);
+    top: calc(100% + 1em);
+   }
+   
+   .repair-button:hover::before, .repair-button:hover::after {
+    height: 410px;
+    width: 410px;
+   }
+   
+   .repair-button:hover {
+    color: rgb(253, 253, 253);
+   }
+   
+   .repair-button:active {
+    filter: brightness(.8);
+   }

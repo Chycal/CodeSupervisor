@@ -117,6 +117,7 @@ export async function initializeLLM(modelId?: string): Promise<void> {
         console.log(`[LLM] 正在初始化嵌入模型...`);
         
         // 创建Embeddings实例
+        // 这里需要用到OpenAI的向量实例，如果使用deepseek会无法初始化
         embeddings = new OpenAIEmbeddings({
           openAIApiKey: apiKey,
           modelName: modelConfig.embeddingModel || 'text-embedding-3-small'

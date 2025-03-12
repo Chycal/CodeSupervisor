@@ -1,0 +1,137 @@
+{
+	"name": "security-assistant",
+	"description": "实时编码安全建议助手",
+	"author": "Microsoft Corporation",
+	"license": "MIT",
+	"version": "1.0.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Microsoft/vscode-extension-samples"
+	},
+	"publisher": "vscode-samples",
+	"categories": ["Programming Languages", "Linters", "Snippets"],
+	"keywords": [
+		"multi-root ready",
+		"security",
+		"code analysis",
+		"ai",
+		"llm"
+	],
+	"engines": {
+		"vscode": "^1.75.0"
+	},
+	"activationEvents": [
+		"onLanguage:javascript",
+		"onLanguage:typescript",
+		"onLanguage:python",
+		"onLanguage:java",
+		"onLanguage:php",
+		"onLanguage:ruby",
+		"onLanguage:plaintext"
+	],
+	"main": "./client/out/extension",
+	"contributes": {
+		"commands": [
+			{
+				"command": "security-assistant.analyzeCode",
+				"title": "分析代码安全性",
+				"category": "安全编码助手"
+			},
+			{
+				"command": "security-assistant.toggleGhostText",
+				"title": "切换安全建议自动补全",
+				"category": "安全编码助手"
+			},
+			{
+				"command": "security-assistant.switchLLMProvider",
+				"title": "切换大模型提供者"
+			},
+			{
+				"command": "security-assistant.addCustomLLMProvider",
+				"title": "添加自定义大模型提供者"
+			},
+			{
+				"command": "security-assistant.importCustomKnowledge",
+				"title": "导入自定义安全知识库",
+				"category": "安全编码助手"
+			}
+		],
+		"menus": {
+			"editor/context": [
+				{
+					"command": "security-assistant.analyzeCode",
+					"when": "editorTextFocus",
+					"group": "navigation"
+				}
+			]
+		},
+		"configuration": {
+			"title": "安全编码助手",
+			"properties": {
+				"securityAssistant.maxNumberOfProblems": {
+					"type": "number",
+					"default": 100,
+					"description": "最大问题数量"
+				},
+				"securityAssistant.enableLLM": {
+					"type": "boolean",
+					"default": true,
+					"description": "启用LLM功能"
+				},
+				"securityAssistant.enableGhostText": {
+					"type": "boolean",
+					"default": true,
+					"description": "启用Ghost Text自动补全"
+				},
+				"securityAssistant.supportedLanguages": {
+					"type": "array",
+					"default": ["javascript", "typescript", "python", "java", "php", "ruby", "plaintext"],
+					"description": "支持的编程语言"
+				},
+				"securityAssistant.llmProvider": {
+					"type": "string",
+					"default": "deepseek",
+					"enum": ["openai", "deepseek"],
+					"enumDescriptions": [
+						"使用OpenAI API",
+						"使用DeepSeek API"
+					],
+					"description": "选择大模型提供者"
+				},
+				"securityAssistant.openaiApiKey": {
+					"type": "string",
+					"default": "",
+					"description": "OpenAI API密钥 (也可通过环境变量OPENAI_API_KEY设置)"
+				},
+				"securityAssistant.deepseekApiKey": {
+					"type": "string",
+					"default": "",
+					"description": "DeepSeek API密钥 (也可通过环境变量DEEPSEEK_API_KEY设置)"
+				},
+				"securityAssistant.customApiBaseUrl": {
+					"type": "string",
+					"default": "",
+					"description": "自定义API基础URL"
+				}
+			}
+		}
+	},
+	"scripts": {
+		"vscode:prepublish": "npm run compile",
+		"compile": "tsc -b",
+		"watch": "tsc -b -w",
+		"lint": "eslint",
+		"postinstall": "cd client && npm install && cd ../server && npm install && cd ..",
+		"test": "sh ./scripts/e2e.sh"
+	},
+	"devDependencies": {
+		"@eslint/js": "^9.13.0",
+		"@stylistic/eslint-plugin": "^2.9.0",
+		"@types/mocha": "^10.0.6",
+		"@types/node": "^20",
+		"eslint": "^9.13.0",
+		"mocha": "^10.3.0",
+		"typescript": "^5.8.2",
+		"typescript-eslint": "^8.26.0"
+	}
+}

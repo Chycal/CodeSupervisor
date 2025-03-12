@@ -1,0 +1,92 @@
+[
+  {
+    "pageContent": "SQL注入是一种常见的安全漏洞，攻击者可以通过注入SQL语句破坏数据库查询逻辑。应使用参数化查询或ORM框架防止SQL注入。",
+    "metadata": { 
+      "category": "sql-injection", 
+      "severity": "high",
+      "id": "SEC-001",
+      "tags": ["database", "injection", "query"]
+    }
+  },
+  {
+    "pageContent": "XSS攻击通过在网页中注入恶意脚本，可能导致信息泄露或会话劫持。应使用内容安全策略(CSP)、输入验证和安全的模板系统。",
+    "metadata": { 
+      "category": "xss", 
+      "severity": "high",
+      "id": "SEC-002",
+      "tags": ["web", "javascript", "injection"]
+    }
+  },
+  {
+    "pageContent": "硬编码的密钥和敏感数据可能导致数据泄露。应使用环境变量、配置文件或密钥管理系统来存储敏感信息。",
+    "metadata": { 
+      "category": "sensitive-data", 
+      "severity": "medium",
+      "id": "SEC-003",
+      "tags": ["credentials", "secrets", "configuration"]
+    }
+  },
+  {
+    "pageContent": "不安全的反序列化可能导致远程代码执行。应验证和清理输入数据，并考虑使用更安全的序列化格式如JSON。",
+    "metadata": { 
+      "category": "deserialization", 
+      "severity": "high",
+      "id": "SEC-004",
+      "tags": ["serialization", "rce", "input-validation"]
+    }
+  },
+  {
+    "pageContent": "不受限制的文件上传可能导致服务器上执行恶意代码。应验证文件类型、大小和内容，并将上传的文件存储在安全位置。",
+    "metadata": { 
+      "category": "file-upload", 
+      "severity": "medium",
+      "id": "SEC-005",
+      "tags": ["upload", "validation", "storage"]
+    }
+  },
+  {
+    "pageContent": "命令注入漏洞允许攻击者执行任意系统命令。应避免直接使用用户输入构建系统命令，使用参数化API或命令参数白名单。",
+    "metadata": { 
+      "category": "command-injection", 
+      "severity": "high",
+      "id": "SEC-006",
+      "tags": ["os", "shell", "injection"]
+    }
+  },
+  {
+    "pageContent": "不安全的直接对象引用(IDOR)可能导致未授权访问数据。应实施适当的访问控制检查，验证用户对请求资源的访问权限。",
+    "metadata": { 
+      "category": "idor", 
+      "severity": "high",
+      "id": "SEC-007",
+      "tags": ["access-control", "authorization"]
+    }
+  },
+  {
+    "pageContent": "跨站请求伪造(CSRF)攻击可能导致未经授权的操作。应使用CSRF令牌、SameSite cookie属性和验证Referer/Origin头。",
+    "metadata": { 
+      "category": "csrf", 
+      "severity": "medium",
+      "id": "SEC-008",
+      "tags": ["web", "session", "authentication"]
+    }
+  },
+  {
+    "pageContent": "不安全的密码存储可能导致凭据泄露。应使用强哈希算法(如bcrypt、Argon2)和加盐存储密码，而不是明文或简单哈希。",
+    "metadata": { 
+      "category": "password-storage", 
+      "severity": "high",
+      "id": "SEC-009",
+      "tags": ["authentication", "cryptography", "hashing"]
+    }
+  },
+  {
+    "pageContent": "XML外部实体(XXE)攻击可能导致敏感数据泄露或服务器端请求伪造。应禁用XML解析器中的外部实体处理。",
+    "metadata": { 
+      "category": "xxe", 
+      "severity": "high",
+      "id": "SEC-010",
+      "tags": ["xml", "parsing", "injection"]
+    }
+  }
+] 

@@ -31,7 +31,6 @@ import {
 } from 'vscode-languageclient/node';
 import * as vscode from 'vscode';
 import { DiagnosticsHandler, DiagnosticProvider } from "./diagnostics";
-import { SecurityAnalyzer } from "./analyzer";
 import { SecurityIssue } from './types';
 // 导入Ghost Text提供程序
 import { GhostTextProvider } from './ghostText';
@@ -52,6 +51,43 @@ let securitySidebarProvider: SecuritySidebarProvider;
 // 诊断树视图提供者
 let diagnosticTreeProvider: DiagnosticTreeDataProvider;
 
+// 状态栏消息项
+let statusBarMessage: StatusBarItem;
+
+// 是否为调试模式
+let isDebugMode = false;
+
+/**
+ * 记录日志的帮助函数，仅在调试模式下输出详细日志
+ * @param message 日志消息
+ * @param forceShow 是否强制显示（即使不在调试模式下）
+ */
+function log(message: string, forceShow = false): void {
+    if (isDebugMode || forceShow) {
+        console.log(message);
+    }
+}
+
+/**
+ * 在状态栏显示消息
+ * @param message 要显示的消息
+ * @param timeout 超时时间（毫秒），0表示不自动隐藏
+ */
+function updateStatusBarMessage(message: string, timeout = 0): void {
+    if (!statusBarMessage) {
+        return;
+    }
+    
+    statusBarMessage.text = message;
+    statusBarMessage.show();
+    
+    if (timeout > 0) {
+        setTimeout(() => {
+            statusBarMessage.hide();
+        }, timeout);
+    }
+}
+
 // 将VSCode诊断转换为SecurityIssue
 function convertDiagnosticsToIssues(diagnostics: Map<string, Diagnostic[]>): SecurityIssue[] {
     const issues: SecurityIssue[] = [];
@@ -60,7 +96,16 @@ function convertDiagnosticsToIssues(diagnostics: Map<string, Diagnostic[]>): Sec
         const fileUri = Uri.parse(uri);
         const fileName = fileUri.fsPath;
         
-        diags.forEach(diag => {
+        // 记录所有诊断的源
+        const sources = new Set<string | undefined>();
+        diags.forEach(diag => sources.add(diag.source));
+        log(`[诊断源] 发现的诊断源: ${Array.from(sources).join(', ')}`);
+        
+        // 只保留源为security-assistant的诊断
+        const filteredDiags = diags.filter(diag => diag.source === 'security-assistant');
+        log(`[诊断过滤] 原始诊断数量: ${diags.length}, 过滤后: ${filteredDiags.length}`);
+        
+        filteredDiags.forEach(diag => {
             // 确定严重性
             let severity: "critical" | "high" | "medium" | "low";
             switch (diag.severity) {
@@ -77,6 +122,10 @@ function convertDiagnosticsToIssues(diagnostics: Map<string, Diagnostic[]>): Sec
                     severity = 'low';
                     break;
             }
+			
+            const ruleId = typeof diag.code === 'object' 
+                ? diag.code?.value?.toString() 
+                : diag.code?.toString() || 'unknown';
             
             issues.push({
                 id: `${uri}:${diag.range.start.line}:${diag.range.start.character}`,
@@ -84,18 +133,39 @@ function convertDiagnosticsToIssues(diagnostics: Map<string, Diagnostic[]>): Sec
                 severity: severity,
                 line: diag.range.start.line + 1, // 转为1-based
                 column: diag.range.start.character + 1, // 转为1-based
-                rule: diag.code?.toString() || 'unknown',
-                filename: fileName
+                rule: ruleId,
+                filename: fileName,
+                source: 'CodeSupervisior' // 统一标记源
             });
         });
     });
     
+    log(`[诊断转换] 转换后的SecurityIssue数量: ${issues.length}`);
     return issues;
 }
 
 export function activate(context: ExtensionContext) {
 	// 添加日志输出
-	console.log('安全编码助手扩展已激活');
+	log('安全编码助手扩展已激活', true);
+
+	// 初始化状态栏消息项
+	statusBarMessage = window.createStatusBarItem(StatusBarAlignment.Left, 10);
+	context.subscriptions.push(statusBarMessage);
+	
+	// 读取debug模式配置
+	const config = workspace.getConfiguration('securityAssistant');
+	isDebugMode = config.get('debugMode') === true;
+	log(`[配置] 调试模式: ${isDebugMode}`, true);
+	
+	// 监听配置变化
+	context.subscriptions.push(
+		workspace.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration('securityAssistant.debugMode')) {
+				isDebugMode = config.get('debugMode') === true;
+				log(`[配置] 调试模式已更新: ${isDebugMode}`, true);
+			}
+		})
+	);
 
 	// 初始化侧边栏提供者
 	securitySidebarProvider = new SecuritySidebarProvider(context.extensionUri);
@@ -124,12 +194,9 @@ export function activate(context: ExtensionContext) {
 		path.join('server', 'out', 'server.js')
 	);
 
-	// 获取配置
-	const config = workspace.getConfiguration('securityAssistant');
-	
 	// 使用配置中的LLM提供者或默认为deepseek
 	const llmProvider = config.get('llmProvider') || 'deepseek';
-	console.log(`[客户端] 配置的LLM提供者: ${llmProvider}`);
+	log(`[客户端] 配置的LLM提供者: ${llmProvider}`);
 
 	// 创建服务器选项
 	const serverOptions: ServerOptions = {
@@ -180,11 +247,11 @@ export function activate(context: ExtensionContext) {
 	client.setTrace(Trace.Verbose);
 
 	// 添加日志输出
-	console.log('正在启动语言服务器...');
+	log('正在启动语言服务器...', true);
 	
 	// 启动客户端，这同时也会启动服务器
 	client.start().then(() => {
-		console.log('语言服务器已启动');
+		log('语言服务器已启动', true);
 		
 		// 监听诊断变化，更新树视图
 		const diagnostics: DiagnosticCollection = languages.createDiagnosticCollection('security-assistant');
@@ -192,27 +259,44 @@ export function activate(context: ExtensionContext) {
 		
 		// 注册诊断通知处理器
 		client.onNotification('security-assistant/publishDiagnostics', (params: { uri: string, diagnostics: Diagnostic[] }) => {
+			log(`[诊断更新] 收到诊断通知，URI: ${params.uri}, 诊断数量: ${params.diagnostics.length}`);
 			const uri = Uri.parse(params.uri);
 			diagnostics.set(uri, params.diagnostics);
 			
 			// 更新诊断树视图
 			const allDiagnostics = new Map<string, Diagnostic[]>();
 			
+			// 首先添加当前收到的诊断
+			if (params.diagnostics.length > 0) {
+				allDiagnostics.set(params.uri, [...params.diagnostics]);
+			}
+			
 			// 使用languages.getDiagnostics()获取所有诊断信息
 			// 这是VS Code推荐的API
 			const allDiagnosticsArr = languages.getDiagnostics();
+			log(`[诊断收集] VS Code API返回的诊断总数: ${allDiagnosticsArr.length}`);
+			
 			for (const [docUri, diags] of allDiagnosticsArr) {
 				if (diags && diags.length > 0) {
+					log(`[诊断收集] URI: ${docUri.toString()}, 诊断数量: ${diags.length}`);
 					// 创建诊断副本，确保数组可变
 					allDiagnostics.set(docUri.toString(), [...diags]);
 				}
 			}
 			
 			const issues = convertDiagnosticsToIssues(allDiagnostics);
+			log(`[诊断转换] 转换后的SecurityIssue数量: ${issues.length}`);
+			
+			// 确保至少使用当前收到的诊断
 			diagnosticTreeProvider.updateIssues(issues);
 			
 			// 更新状态上下文
 			vscode.commands.executeCommand('setContext', 'security-assistant.hasDiagnostics', issues.length > 0);
+			
+			// 如果有问题但树视图为空，则尝试手动触发更新
+			if (issues.length > 0) {
+				log('[诊断更新] 发现问题，确保树视图更新');
+			}
 		});
 		
 		// 注册跳转到问题位置命令
@@ -251,7 +335,15 @@ export function activate(context: ExtensionContext) {
 						});
 					}
 				});
-				vscode.window.showInformationMessage('已刷新诊断信息');
+				
+				// 使用手动刷新
+				log('[刷新命令] 手动触发诊断树视图更新');
+				setTimeout(() => {
+					updateDiagnosticTreeView();
+				}, 500); // 给服务器一点时间处理
+				
+				// 使用状态栏显示刷新消息
+				updateStatusBarMessage('已刷新诊断信息', 3000);
 			})
 		);
 		
@@ -261,7 +353,9 @@ export function activate(context: ExtensionContext) {
 				diagnostics.clear();
 				diagnosticTreeProvider.clearIssues();
 				vscode.commands.executeCommand('setContext', 'security-assistant.hasDiagnostics', false);
-				vscode.window.showInformationMessage('已清除所有诊断问题');
+				
+				// 使用状态栏显示清除消息
+				updateStatusBarMessage('已清除所有诊断问题', 3000);
 			})
 		);
 		
@@ -284,6 +378,9 @@ export function activate(context: ExtensionContext) {
 						}[];
 					}
 					
+					// 显示正在修复的状态
+					updateStatusBarMessage('正在获取修复建议...', 0);
+					
 					const response = await client.sendRequest('security-assistant/getCodeFix', {
 						uri: vscode.Uri.file(item.issue.filename).toString(),
 						line: item.issue.line - 1,
@@ -304,7 +401,7 @@ export function activate(context: ExtensionContext) {
 						});
 						
 						await vscode.workspace.applyEdit(workspaceEdit);
-						vscode.window.showInformationMessage('已修复问题');
+						updateStatusBarMessage('已修复问题', 3000);
 					} else {
 						vscode.window.showWarningMessage('无法自动修复此问题');
 					}
@@ -370,8 +467,8 @@ export function activate(context: ExtensionContext) {
 							}
 						}
 						
-						// 显示等待消息
-						window.setStatusBarMessage('分析代码安全性...', 3000);
+						// 显示进度消息在状态栏
+						updateStatusBarMessage('分析代码安全性...', 0);
 						
 						// 发送请求到服务器进行分析
 						const response = await client.sendRequest('security-assistant/analyzeCode', {
@@ -383,7 +480,7 @@ export function activate(context: ExtensionContext) {
 						});
 						
 						// 输出调试信息
-						console.log('[安全分析] 收到响应:', response);
+						log('[安全分析] 收到响应:' + (typeof response === 'string' ? response : JSON.stringify(response)));
 						
 						// 确保响应是字符串
 						const responseText = typeof response === 'string' ? response : JSON.stringify(response);
@@ -405,8 +502,8 @@ export function activate(context: ExtensionContext) {
 							}
 						], 90);
 						
-						// 显示提示
-						window.showInformationMessage("安全分析结果已在侧边栏中显示");
+						// 更新状态栏消息
+						updateStatusBarMessage('安全分析完成', 3000);
 						
 						// 聚焦到侧边栏视图
 						commands.executeCommand('security-assistant.securityDashboard.focus');
@@ -551,6 +648,48 @@ export function activate(context: ExtensionContext) {
 		// 显示扩展已激活信息
 		window.showInformationMessage('安全编码助手已激活');
 
+		// 初始化时自动触发一次工作区分析，确保诊断树视图立即显示
+		// 使用setTimeout确保在扩展完全初始化后执行
+		setTimeout(() => {
+			// 获取当前配置，检查是否需要自动分析
+			const config = workspace.getConfiguration('securityAssistant');
+			const autoAnalyze = config.get('autoAnalyzeOnStartup') !== false; // 默认启用
+			
+			console.log(`[自动分析] 配置启用状态: ${autoAnalyze}`);
+			
+			if (autoAnalyze) {
+				if (workspace.workspaceFolders && workspace.workspaceFolders.length > 0) {
+					// 分析当前打开的文档，而不是整个工作区，以提高初始化速度
+					const openedTextEditors = window.visibleTextEditors;
+					console.log(`[自动分析] 找到 ${openedTextEditors.length} 个打开的编辑器`);
+					
+					if (openedTextEditors.length > 0) {
+						// 对当前活动的编辑器进行分析
+						for (const editor of openedTextEditors) {
+							if (editor && editor.document) {
+								console.log(`[自动分析] 分析文档: ${editor.document.uri.toString()}`);
+								
+								// 仅通过LSP发送通知到语言服务器进行分析
+								client.sendNotification('textDocument/didChange', {
+									textDocument: {
+										uri: editor.document.uri.toString(),
+										version: editor.document.version
+									},
+									contentChanges: [{ text: editor.document.getText() }]
+								});
+							}
+						}
+						console.log('[自动分析] 已触发当前打开文档的安全分析');
+						
+						// 等待服务器处理并安排一次延迟的树视图更新
+						setTimeout(() => {
+							updateDiagnosticTreeView();
+						}, 1500);
+					}
+				}
+			}
+		}, 1000);
+
 		// 导入自定义知识库命令
 		context.subscriptions.push(
 			commands.registerCommand('security-assistant.importCustomKnowledge', async () => {
@@ -638,9 +777,8 @@ export function activate(context: ExtensionContext) {
 	// 包括工作区全量检测和单文件全量检测
 	// #region
 	// 初始化工具
-    const diagnosticsHandler = new DiagnosticsHandler();
-    const diagnosticProvider = new DiagnosticProvider(diagnosticsHandler);
-    const securityAnalyzer = new SecurityAnalyzer();
+	const diagnosticsHandler = new DiagnosticsHandler();
+	const diagnosticProvider = new DiagnosticProvider(diagnosticsHandler);
 
 	// 类型注册
 	context.subscriptions.push(
@@ -653,156 +791,205 @@ export function activate(context: ExtensionContext) {
 		)
 	);
 	// 单文件全量检测功能
-    const fullCode = vscode.commands.registerCommand('security-assistant.fullCode',async function () {
-        const editor = vscode.window.activeTextEditor;
-        if (!editor) {
-            vscode.window.showWarningMessage(
-              "CodeSupervisior: 请打开一个文件"
-            );
-            return;
-        }
+	const fullCode = vscode.commands.registerCommand('security-assistant.fullCode',async function () {
+		const editor = vscode.window.activeTextEditor;
+		if (!editor) {
+			vscode.window.showWarningMessage(
+			  "CodeSupervisior: 请打开一个文件"
+			);
+			return;
+		}
 
 		if(editor){
 			try {
-                await vscode.window.withProgress(
-                  {
-                    location: vscode.ProgressLocation.Notification,
-                    title: "CodeSupervisior: 检测开始，请勿在检测期间更改代码",
-                    cancellable: false,
-                  },
-                  async (progress) => {
-                    progress.report({ increment: 0 });
-        
-                    const document = editor.document;
-                    const code = document.getText();
-                    const language = document.languageId;
-                    const filename = document.fileName;
-                    // 清除已有分析
-                    diagnosticsHandler.clearDiagnostics();
-        
-                    // 分析代码
-                    const result = await securityAnalyzer.analyzeCode(code, language,filename);
-        
-                    progress.report({ increment: 100 });
-        
-                    // 更新分析结果
-                    diagnosticsHandler.updateDiagnostics(document, result.issues);
+				await vscode.window.withProgress(
+				  {
+					location: vscode.ProgressLocation.Notification,
+					title: "CodeSupervisior: 检测开始，请勿在检测期间更改代码",
+					cancellable: false,
+				  },
+				  async (progress) => {
+					progress.report({ increment: 0 });
+		
+					const document = editor.document;
+					// 清除已有分析
+					diagnosticsHandler.clearDiagnostics();
+		
+					// 通过LSP发送到后端进行分析
+					progress.report({ increment: 50, message: "正在发送代码到服务器分析..." });
 
-                    // 将分析结果更新到侧边栏
-                    securitySidebarProvider.updateIssues(result.issues, 80);
-                    
-                    // 同时更新诊断树视图
-                    diagnosticTreeProvider.updateIssues(result.issues);
-                    vscode.commands.executeCommand('setContext', 'security-assistant.hasDiagnostics', result.issues.length > 0);
-                    
-                    // 确保侧边栏视图可见
-                    await vscode.commands.executeCommand('security-assistant.securityDashboard.focus');
-                  }
-                );
-              } catch (error) {
-                console.error("分析出错:", error);
-                vscode.window.showErrorMessage(
-                  `CodeSupervisior: - ${
-                    error instanceof Error ? error.message : "未知错误"
-                  }`
-                );
-              }
-            
-	    }
-        
-    });
+					// 发送请求到服务器进行分析
+					client.sendNotification('textDocument/didChange', {
+						textDocument: {
+							uri: document.uri.toString(),
+							version: document.version
+						},
+						contentChanges: [{ text: document.getText() }]
+					});
+
+					try {
+						// 额外发送一个全量分析请求
+						await client.sendRequest('security-assistant/analyzeFullDocument', {
+							textDocument: { uri: document.uri.toString() }
+						});
+					} catch (error) {
+						console.log('[分析] 全量分析请求失败，可能服务器不支持此方法:', error);
+						// 发送备用请求
+						try {
+							await client.sendRequest('security-assistant/analyzeCode', {
+								textDocument: { uri: document.uri.toString() },
+								range: {
+									start: { line: 0, character: 0 },
+									end: { line: document.lineCount, character: 0 }
+								}
+							});
+						} catch (err) {
+							console.error('[分析] 备用分析请求也失败:', err);
+						}
+					}
+		
+					progress.report({ increment: 100, message: "分析完成" });
+					
+					// 等待一段时间让服务器处理并返回诊断
+					await new Promise(resolve => setTimeout(resolve, 1000));
+					
+					// 使用LSP更新的诊断信息会自动更新诊断树视图
+					updateDiagnosticTreeView();
+					
+					// 确保侧边栏视图可见
+					await vscode.commands.executeCommand('security-assistant.securityDashboard.focus');
+				  }
+				);
+			  } catch (error) {
+				console.error("分析出错:", error);
+				vscode.window.showErrorMessage(
+				  `CodeSupervisior: - ${
+					error instanceof Error ? error.message : "未知错误"
+				  }`
+				);
+			  }
+		}
+	});
 	// 工作区文件全量检测
-    const workspace_fullcode = vscode.commands.registerCommand('security-assistant.workSpaceFullCode',async function () {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        const workspaceURI = vscode.workspace.workspaceFile;
-        if (!workspaceFolders) {
-            vscode.window.showWarningMessage(
-            "CodeSupervisior: 请打开一个工作区"
-            );
-            return;
-        }
-        if(!workspaceURI){
-            vscode.window.showWarningMessage(
-            "CodeSupervisior: 请打开一个工作区"
-            );
-            return;
-        }
-        try {
-            await vscode.window.withProgress(
-            {
-            location: vscode.ProgressLocation.Notification,
-            title: "CodeSupervisior: 检测开始，请勿在检测期间更改代码",
-            cancellable: true,
-            },
-            async (progress, token) => {
-            const allIssues:SecurityIssue[]=[];
-            // Find all supported files
-            const files = await vscode.workspace.findFiles(
-                "{**/*.js,**/*.ts,**/*.py,**/*.java,**/*.cpp}",
-                "{**/node_modules/**,**/dist/**,**/build/**,**/.git/**}"
-            );
-
-            const totalFiles = files.length;
-            let processedFiles = 0;
-
-            for (const file of files) {
-                if (token.isCancellationRequested) {
-                vscode.window.showInformationMessage(
-                    "CodeSupervisior: 分析取消"
-                );
-                return;
-                }
-
-                const document = await vscode.workspace.openTextDocument(file);
-                const code = document.getText();
-                const language = document.languageId;
-                const filename = document.fileName;
-                progress.report({
-                increment: (1 / totalFiles) * 100,
-                message: `正在分析 ${vscode.workspace.asRelativePath(
-                    file
-                )} (${++processedFiles}/${totalFiles})`,
-                });
-
-                try {
-                const result = await securityAnalyzer.analyzeCode(
-                    code,
-                    language,
-                    filename
-                );
-                diagnosticsHandler.updateDiagnostics(document, result.issues);
-                allIssues.push(...result.issues);
-                } catch (error) {
-                console.error(`分析失败 ${file.fsPath}:`, error);
-                // Continue with next file
-                }
-            }
-            
-            // 将分析结果更新到侧边栏
-            securitySidebarProvider.updateIssues(allIssues, 80);
-            
-            // 同时更新诊断树视图
-            diagnosticTreeProvider.updateIssues(allIssues);
-            vscode.commands.executeCommand('setContext', 'security-assistant.hasDiagnostics', allIssues.length > 0);
-            
-            // 确保侧边栏视图可见
-            await vscode.commands.executeCommand('security-assistant.securityDashboard.focus');
-            }
-        );
-        } catch (error) {
-        console.error("工作区分析错误:", error);
-        vscode.window.showErrorMessage(
-            `CodeSupervisior: 工作区分析失败 - ${
-            error instanceof Error ? error.message : "未知错误"
-            }`
-        );
-        }
-    });
+	const workspace_fullcode = vscode.commands.registerCommand('security-assistant.workSpaceFullCode',async function () {
+		const workspaceFolders = vscode.workspace.workspaceFolders;
+		const workspaceURI = vscode.workspace.workspaceFile;
+		if (!workspaceFolders) {
+			vscode.window.showWarningMessage(
+			"CodeSupervisior: 请打开一个工作区"
+			);
+			return;
+		}
+		if(!workspaceURI){
+			vscode.window.showWarningMessage(
+			"CodeSupervisior: 请打开一个工作区"
+			);
+			return;
+		}
+		try {
+			await vscode.window.withProgress(
+			{
+			location: vscode.ProgressLocation.Notification,
+			title: "CodeSupervisior: 检测开始，请勿在检测期间更改代码",
+			cancellable: true,
+			},
+			async (progress, _token) => {
+				progress.report({ message: "正在准备分析..." });
+				
+				// 清除已有诊断
+				diagnosticsHandler.clearDiagnostics();
+				
+				// 发送请求到服务器，执行工作区全量分析
+				progress.report({ message: "正在向服务器发送工作区分析请求..." });
+				
+				try {
+					// 通过LSP发送工作区分析请求
+					await client.sendRequest('security-assistant/analyzeWorkspace', {
+						workspaceFolders: workspaceFolders.map(folder => folder.uri.toString())
+					});
+				} catch (error) {
+					console.error("工作区分析请求错误:", error);
+					vscode.window.showInformationMessage('工作区分析功能需要服务器支持，正在尝试替代方案...');
+					
+					// 如果工作区分析失败，尝试逐个文件分析
+					try {
+						// 查找所有支持的文件
+						const files = await vscode.workspace.findFiles(
+							"{**/*.js,**/*.ts,**/*.py,**/*.java,**/*.cpp}",
+							"{**/node_modules/**,**/dist/**,**/build/**,**/.git/**}"
+						);
+						
+						progress.report({ message: `找到 ${files.length} 个文件，逐个分析中...` });
+						
+						// 逐个文件发送分析请求
+						let processedFiles = 0;
+						for (const file of files) {
+							try {
+								const document = await vscode.workspace.openTextDocument(file);
+								client.sendNotification('textDocument/didChange', {
+									textDocument: {
+										uri: document.uri.toString(),
+										version: document.version
+									},
+									contentChanges: [{ text: document.getText() }]
+								});
+								
+								// 尝试使用analyzeCode方法
+								await client.sendRequest('security-assistant/analyzeCode', {
+									textDocument: { uri: document.uri.toString() },
+									range: {
+										start: { line: 0, character: 0 },
+										end: { line: document.lineCount, character: 0 }
+									}
+								});
+								
+								processedFiles++;
+								progress.report({ 
+									message: `已分析 ${processedFiles}/${files.length} 个文件...`
+								});
+							} catch (err) {
+								console.error(`分析文件失败 ${file.fsPath}:`, err);
+							}
+						}
+					} catch (err) {
+						console.error("替代方案也失败:", err);
+						vscode.window.showErrorMessage("无法分析工作区文件");
+					}
+				}
+				
+				// 等待分析完成
+				progress.report({ message: "等待服务器分析完成..." });
+				await new Promise(resolve => setTimeout(resolve, 2000));
+				
+				// 更新诊断视图
+				updateDiagnosticTreeView();
+				
+				// 确保侧边栏视图可见
+				await vscode.commands.executeCommand('security-assistant.securityDashboard.focus');
+			});
+		} catch (error) {
+			console.error("工作区分析错误:", error);
+			vscode.window.showErrorMessage(
+				`CodeSupervisior: 工作区分析失败 - ${
+				error instanceof Error ? error.message : "未知错误"
+				}`
+			);
+		}
+	});
 	// 注册
 	context.subscriptions.push(fullCode);
 	context.subscriptions.push(workspace_fullcode);
 	//#endregion
 	// -----------------------------END------------------------------
+
+	// 定时更新诊断树视图
+	const diagnosticTreeUpdateInterval = setInterval(() => {
+		log('[诊断更新] 定时更新诊断树视图');
+		updateDiagnosticTreeView();
+	}, 2000); // 每2秒更新一次
+
+	// 确保在扩展停用时清除定时器
+	context.subscriptions.push({ dispose: () => clearInterval(diagnosticTreeUpdateInterval) });
 }
 
 // 更新LLM提供者状态栏
@@ -822,6 +1009,43 @@ async function updateLLMProviderStatus() {
 	} catch (error) {
 		llmProviderStatusBar.text = '$(hubot) LLM: 错误';
 		llmProviderStatusBar.tooltip = `获取LLM状态失败: ${error}`;
+	}
+}
+
+// 辅助函数：统一更新诊断树视图
+function updateDiagnosticTreeView() {
+	// 获取所有诊断
+	const allDiagnostics = new Map<string, Diagnostic[]>();
+	const allDiagnosticsArr = languages.getDiagnostics();
+	
+	log(`[诊断视图更新] VS Code API返回诊断数组长度: ${allDiagnosticsArr.length}`);
+	
+	// 记录有多少文件包含诊断
+	let filesWithDiagnostics = 0;
+	let totalDiagnosticCount = 0;
+	
+	for (const [docUri, diags] of allDiagnosticsArr) {
+		if (diags && diags.length > 0) {
+			log(`[诊断视图更新] 文件 ${docUri.toString()} 有 ${diags.length} 个诊断`);
+			filesWithDiagnostics++;
+			totalDiagnosticCount += diags.length;
+			
+			allDiagnostics.set(docUri.toString(), [...diags]);
+		}
+	}
+	
+	log(`[诊断视图更新] 总计: ${filesWithDiagnostics} 个文件有诊断，共 ${totalDiagnosticCount} 个诊断项`);
+	
+	// 转换并更新
+	const issues = convertDiagnosticsToIssues(allDiagnostics);
+	log(`[诊断树视图更新] 找到 ${issues.length} 个安全问题`);
+	
+	diagnosticTreeProvider.updateIssues(issues);
+	vscode.commands.executeCommand('setContext', 'security-assistant.hasDiagnostics', issues.length > 0);
+	
+	// 如果有安全问题，在状态栏显示
+	if (issues.length > 0) {
+		updateStatusBarMessage(`发现 ${issues.length} 个安全问题`, 5000);
 	}
 }
 

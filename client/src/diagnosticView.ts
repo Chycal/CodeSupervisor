@@ -73,6 +73,11 @@ export class DiagnosticTreeDataProvider implements vscode.TreeDataProvider<Diagn
      */
     public updateIssues(issues: SecurityIssue[]): void {
         this._issues = issues;
+        // 仅在调试模式或问题数量变化时输出日志
+        if (vscode.workspace.getConfiguration('securityAssistant').get('debugMode') === true || 
+            this._issues.length !== issues.length) {
+            console.log(`[诊断树视图] 更新诊断问题: ${this._issues.length} 个问题`);
+        }
         this._onDidChangeTreeData.fire();
     }
     
@@ -112,19 +117,25 @@ export class DiagnosticTreeDataProvider implements vscode.TreeDataProvider<Diagn
      * 获取分类节点
      */
     private _getCategories(): DiagnosticItem[] {
-        // 统计各类问题数量
-        const criticalCount = this._issues.filter(i => i.severity === 'critical').length;
-        const highCount = this._issues.filter(i => i.severity === 'high').length;
-        const mediumCount = this._issues.filter(i => i.severity === 'medium').length;
-        const lowCount = this._issues.filter(i => i.severity === 'low').length;
+        // 如果没有问题，显示一个空状态
+        if (this._issues.length === 0) {
+            return [new DiagnosticItem('没有发现问题', DiagnosticItemType.Category)];
+        }
         
-        // 创建分类节点
+        // 创建四个固定分类：严重、高危、中危、低危
         const categories: DiagnosticItem[] = [];
         
+        // 统计各类别的数量
+        const criticalCount = this._issues.filter(issue => issue.severity === 'critical').length;
+        const highCount = this._issues.filter(issue => issue.severity === 'high').length;
+        const mediumCount = this._issues.filter(issue => issue.severity === 'medium').length;
+        const lowCount = this._issues.filter(issue => issue.severity === 'low').length;
+        
+        // 只添加有问题的分类
         if (criticalCount > 0) {
             categories.push(new DiagnosticItem(
-                `严重问题 (${criticalCount})`, 
-                DiagnosticItemType.Category, 
+                `严重问题 (${criticalCount})`,
+                DiagnosticItemType.Category,
                 undefined,
                 vscode.TreeItemCollapsibleState.Expanded
             ));
@@ -132,8 +143,8 @@ export class DiagnosticTreeDataProvider implements vscode.TreeDataProvider<Diagn
         
         if (highCount > 0) {
             categories.push(new DiagnosticItem(
-                `高危问题 (${highCount})`, 
-                DiagnosticItemType.Category, 
+                `高危问题 (${highCount})`,
+                DiagnosticItemType.Category,
                 undefined,
                 vscode.TreeItemCollapsibleState.Expanded
             ));
@@ -141,8 +152,8 @@ export class DiagnosticTreeDataProvider implements vscode.TreeDataProvider<Diagn
         
         if (mediumCount > 0) {
             categories.push(new DiagnosticItem(
-                `中危问题 (${mediumCount})`, 
-                DiagnosticItemType.Category, 
+                `中危问题 (${mediumCount})`,
+                DiagnosticItemType.Category,
                 undefined,
                 vscode.TreeItemCollapsibleState.Expanded
             ));
@@ -150,16 +161,11 @@ export class DiagnosticTreeDataProvider implements vscode.TreeDataProvider<Diagn
         
         if (lowCount > 0) {
             categories.push(new DiagnosticItem(
-                `低危问题 (${lowCount})`, 
-                DiagnosticItemType.Category, 
+                `低危问题 (${lowCount})`,
+                DiagnosticItemType.Category,
                 undefined,
                 vscode.TreeItemCollapsibleState.Expanded
             ));
-        }
-        
-        if (categories.length === 0) {
-            // 如果没有问题，显示一个空状态
-            return [new DiagnosticItem('没有发现问题', DiagnosticItemType.Category)];
         }
         
         return categories;
@@ -171,7 +177,7 @@ export class DiagnosticTreeDataProvider implements vscode.TreeDataProvider<Diagn
     private _getIssuesForCategory(category: string): DiagnosticItem[] {
         let severity: "critical" | "high" | "medium" | "low";
         
-        // 根据分类名称确定对应的严重性
+        // 简单地根据分类标题确定严重性
         if (category.startsWith('严重')) {
             severity = 'critical';
         } else if (category.startsWith('高危')) {
@@ -184,13 +190,38 @@ export class DiagnosticTreeDataProvider implements vscode.TreeDataProvider<Diagn
             return [];
         }
         
-        // 过滤对应严重性的问题并创建树项
+        // 过滤对应严重性的问题
         return this._issues
             .filter(issue => issue.severity === severity)
-            .map(issue => new DiagnosticItem(
-                issue.message.split('\n')[0], // 使用第一行作为标题
-                DiagnosticItemType.Issue,
-                issue
-            ));
+            .map(issue => {
+                // 只提取规则名称，避免显示冗长的消息
+                // 如果有规则ID，则直接使用规则ID作为显示名称
+                let ruleName = issue.rule || 'unknown';
+                // 如果规则ID不存在或为unknown，尝试从消息中提取第一行作为名称
+                if (ruleName === 'unknown' && issue.message) {
+                    ruleName = issue.message.split('\n')[0].trim();
+                    // 如果消息过长，进行截断
+                    if (ruleName.length > 50) {
+                        ruleName = ruleName.substring(0, 47) + '...';
+                    }
+                }
+                
+                // 文件名（取最后一部分）
+                const fileName = issue.filename.split(/[/\\]/).pop() || '';
+                
+                // 创建简洁易读的标签 - 仅显示规则名称，文件和行号作为描述
+                const label = `${ruleName}`;
+                
+                const item = new DiagnosticItem(
+                    label,
+                    DiagnosticItemType.Issue,
+                    issue
+                );
+                
+                // 将文件名和行号设置为描述
+                item.description = `${fileName}:${issue.line}`;
+                
+                return item;
+            });
     }
 } 

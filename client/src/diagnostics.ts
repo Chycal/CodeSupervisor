@@ -9,6 +9,13 @@ export class DiagnosticsHandler {
       vscode.languages.createDiagnosticCollection("CodeSupervisior");
   }
 
+  /**
+   * 获取诊断集合
+   */
+  public getDiagnosticCollection(): vscode.DiagnosticCollection {
+    return this.diagnosticCollection;
+  }
+
   public updateDiagnostics(
     document: vscode.TextDocument,
     issues: SecurityIssue[]
@@ -16,6 +23,9 @@ export class DiagnosticsHandler {
     const diagnostics: vscode.Diagnostic[] = [];
 
     for (const issue of issues) {
+      // 确保每个问题都设置源为CodeSupervisior
+      issue.source = 'CodeSupervisior';
+      
       const range = this.getIssueRange(document, issue);
       const diagnostic = new vscode.Diagnostic(
         range,

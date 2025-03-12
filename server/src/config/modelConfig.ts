@@ -25,7 +25,7 @@ export const modelConfigs: Record<string, ModelConfig> = {
 	//   modelName: 'deepseek-r1-250120',
     temperature: 0.1,
     embeddingModel: undefined,
-    useEmbeddings: true
+    useEmbeddings: false
   },
   anthropic: {
     name: 'Anthropic',

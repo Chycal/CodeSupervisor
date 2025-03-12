@@ -1,4 +1,4 @@
-// 前端使用LLM分析的模块，暂不改动
+// 前端使用LLM分析的模块，已弃用
 
 import * as vscode from "vscode";
 import { SecurityIssue, AnalysisResult } from "./types";

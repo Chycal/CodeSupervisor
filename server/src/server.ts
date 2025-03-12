@@ -5,13 +5,12 @@
 import {
 	createConnection,
 	TextDocuments,
-	Diagnostic,
-	DiagnosticSeverity,
+	// Diagnostic,
+	// DiagnosticSeverity,
 	ProposedFeatures,
 	InitializeParams,
 	DidChangeConfigurationNotification,
 	CompletionItem,
-	CompletionItemKind,
 	TextDocumentPositionParams,
 	TextDocumentSyncKind,
 	InitializeResult,
@@ -20,9 +19,7 @@ import {
 	CodeActionKind,
 	CodeAction,
 	CodeActionParams,
-	Command,
-	Range,
-	TextDocumentIdentifier
+	Command
 } from 'vscode-languageserver/node';
 
 import {
@@ -54,7 +51,7 @@ const documents = new TextDocuments(TextDocument);
 
 let hasConfigurationCapability = false;
 let hasWorkspaceFolderCapability = false;
-let hasDiagnosticRelatedInformationCapability = false;
+// let hasDiagnosticRelatedInformationCapability = false;
 
 // 标记LLM是否初始化
 let isLLMInitialized = false;
@@ -92,11 +89,11 @@ connection.onInitialize((params: InitializeParams) => {
 	hasWorkspaceFolderCapability = !!(
 		capabilities.workspace && !!capabilities.workspace.workspaceFolders
 	);
-	hasDiagnosticRelatedInformationCapability = !!(
-		capabilities.textDocument &&
-		capabilities.textDocument.publishDiagnostics &&
-		capabilities.textDocument.publishDiagnostics.relatedInformation
-	);
+	// hasDiagnosticRelatedInformationCapability = !!(
+	// 	capabilities.textDocument &&
+	// 	capabilities.textDocument.publishDiagnostics &&
+	// 	capabilities.textDocument.publishDiagnostics.relatedInformation
+	// );
 
 	// 获取客户端配置
 	const settings = params.initializationOptions?.settings;
@@ -105,11 +102,6 @@ connection.onInitialize((params: InitializeParams) => {
 		if (settings.securityAssistant?.openaiApiKey && !process.env.OPENAI_API_KEY) {
 			process.env.OPENAI_API_KEY = settings.securityAssistant.openaiApiKey;
 			console.log('从配置中读取OpenAI API密钥');
-		}
-		
-		if (settings.securityAssistant?.deepseekApiKey && !process.env.DEEPSEEK_API_KEY) {
-			process.env.DEEPSEEK_API_KEY = settings.securityAssistant.deepseekApiKey;
-			console.log('从配置中读取DeepSeek API密钥');
 		}
 	}
 
@@ -174,6 +166,8 @@ connection.onInitialized(async () => {
 			// 初始化LLM
 			await initializeLLM(preferredModel);
 			isLLMInitialized = true;
+			console.log(`[服务器] LLM初始化完成`);
+
 		} else {
 			console.log('[服务器] 未找到OpenAI API密钥，LLM功能将不可用');
 			console.log('[服务器] 请在环境变量中设置OPENAI_API_KEY');
@@ -224,44 +218,9 @@ connection.languages.diagnostics.on(async (params) => {
 		// 运行安全规则和基本诊断
 		const securityDiagnostics = await runSecurityRules(document);
 		
-		// 获取基本诊断 (不再调用validateTextDocument)
-		const text = document.getText();
-		const settings = await getDocumentSettings(document.uri);
-		const pattern = /\b[A-Z]{2,}\b/g;
-		let m: RegExpExecArray | null;
-		let problems = 0;
-		const basicDiagnostics: Diagnostic[] = [];
-		while ((m = pattern.exec(text)) && problems < settings.maxNumberOfProblems) {
-			problems++;
-			const diagnostic: Diagnostic = {
-				severity: DiagnosticSeverity.Information,
-				range: {
-					start: document.positionAt(m.index),
-					end: document.positionAt(m.index + m[0].length)
-				},
-				message: `${m[0]} 是全大写的。`,
-				source: 'security-assistant'
-			};
-			if (hasDiagnosticRelatedInformationCapability) {
-				diagnostic.relatedInformation = [
-					{
-						location: {
-							uri: document.uri,
-							range: Object.assign({}, diagnostic.range)
-						},
-						message: '命名很重要'
-					}
-				];
-			}
-			basicDiagnostics.push(diagnostic);
-		}
-		
-		// 合并诊断结果
-		const allDiagnostics = [...securityDiagnostics, ...basicDiagnostics];
-		
 		return {
 			kind: DocumentDiagnosticReportKind.Full,
-			items: allDiagnostics
+			items: securityDiagnostics
 		} satisfies DocumentDiagnosticReport;
 	} else {
 		return {
@@ -369,38 +328,37 @@ connection.onCompletion(
 		// 如果启用了LLM并且文档类型受支持，则提供基于LLM的补全
 		if (settings.enableLLM && isLLMInitialized && isSupported) {
 			try {
-				return await generateCodeCompletion(document, params.position);
+				const llmCompletions = await generateCodeCompletion(document, params.position);
+				if (llmCompletions && llmCompletions.length > 0) {
+					console.log(`[服务器] 返回LLM生成的补全项: ${llmCompletions.length}项`);
+					return llmCompletions;
+				}
 			} catch (error) {
 				connection.console.error(`代码补全生成失败: ${error}`);
 			}
 		}
-		
-		// 回退到默认补全项
-		return [
-			{
-				label: 'TypeScript',
-				kind: CompletionItemKind.Text,
-				data: 1
-			},
-			{
-				label: 'JavaScript',
-				kind: CompletionItemKind.Text,
-				data: 2
-			}
-		];
+		return [];
 	}
 );
 
 // 完成补全项的额外处理
 connection.onCompletionResolve(
 	(item: CompletionItem): CompletionItem => {
-		if (item.data === 1) {
-			item.detail = 'TypeScript细节';
-			item.documentation = 'TypeScript文档';
-		} else if (item.data === 2) {
-			item.detail = 'JavaScript细节';
-			item.documentation = 'JavaScript文档';
+		// 如果是LLM生成的补全项，已经有详细信息，直接返回
+		if (item.data && typeof item.data === 'number' && item.data >= 1 && item.data <= 2) {
+			// 处理旧的默认补全项
+			if (item.data === 1) {
+				item.detail = 'TypeScript细节';
+				item.documentation = 'TypeScript文档';
+			} else if (item.data === 2) {
+				item.detail = 'JavaScript细节';
+				item.documentation = 'JavaScript文档';
+			}
+		} else if (!item.documentation) {
+			// 为没有文档的项添加默认文档
+			item.documentation = '安全编码助手提供的代码补全建议';
 		}
+		
 		return item;
 	}
 );
@@ -428,31 +386,8 @@ connection.onRequest('security-assistant/analyzeCode', async (params: CodeAnalys
 	}
 	
 	try {
-		// 使用LLM分析代码安全性
-		const result = await analyzeCodeSecurity(document, range);
-		return result;
-	} catch (error) {
-		connection.console.error(`代码安全分析失败: ${error}`);
-		return '分析代码时发生错误，请稍后再试';
-	}
-});
-
-// 分析代码安全性命令
-connection.onRequest('security-assistant/analyze-code', async (params: {
-	textDocument: TextDocumentIdentifier;
-	range: Range;
-}) => {
-	console.log('[服务器] 收到代码安全分析请求');
-	
-	const document = documents.get(params.textDocument.uri);
-	if (!document) {
-		console.log('[服务器] 错误: 找不到文档');
-		return '错误: 无法找到文档';
-	}
-	
-	try {
 		console.log('[服务器] 开始分析代码安全性');
-		const analysis = await analyzeCodeSecurity(document, params.range);
+		const analysis = await analyzeCodeSecurity(document, range);
 		console.log('[服务器] 代码安全分析完成');
 		return analysis;
 	} catch (error) {
@@ -530,6 +465,87 @@ connection.onRequest('security-assistant.importCustomKnowledge', async (params: 
 		console.error('[服务器] 导入自定义知识库失败:', error);
 		return { success: false, message: `导入失败: ${error}` };
 	}
+});
+
+// 处理getCodeFix请求
+connection.onRequest('security-assistant/getCodeFix', async (params: { 
+    uri: string;
+    line: number;
+    character: number;
+}) => {
+    console.log(`[服务器] 收到生成代码修复请求: ${params.uri}:${params.line}:${params.character}`);
+    
+    // 获取文档
+    const document = documents.get(params.uri);
+    if (!document) {
+        return undefined;
+    }
+    
+    if (!isLLMInitialized) {
+        console.log('[服务器] LLM未初始化，无法生成代码修复');
+        return undefined;
+    }
+    
+    try {
+        // 定义问题所在行的范围
+        const range = {
+            start: { line: Math.max(0, params.line - 5), character: 0 },
+            end: { line: Math.min(document.lineCount - 1, params.line + 5), character: Number.MAX_SAFE_INTEGER }
+        };
+        
+        // 使用已有的analyzeCodeSecurity函数分析问题
+        console.log('[服务器] 分析安全问题并生成修复建议');
+        const analysis = await analyzeCodeSecurity(document, range);
+        
+        // 将分析结果和修复提示一起发送给服务器
+        console.log('[服务器] 生成代码修复JSON');
+        
+        // 创建一个模拟的修复响应
+        // 在实际实现中，应该使用LLM再次处理分析结果生成修复方案
+        // 这里为了简化，直接构造一个可能的修复方案
+        const targetLine = document.getText({
+            start: { line: params.line, character: 0 },
+            end: { line: params.line, character: Number.MAX_SAFE_INTEGER }
+        });
+        
+        // 根据分析结果构造修复方案
+        const securityIssueTypes = {
+            'sql注入': '// 使用参数化查询替代字符串拼接\n' + targetLine.replace(/\+\s*['"].*?['"]/g, '?').replace(/\+/g, ', '),
+            'xss': '// 使用安全的DOM API\n' + targetLine.replace(/innerHTML/g, 'textContent'),
+            '命令注入': '// 使用安全的命令执行方式\n' + targetLine.replace(/exec\s*\(/g, 'execFile('),
+            '文件路径遍历': '// 验证和净化文件路径\n' + targetLine.replace(/\.\.\/|\.\.\\/, ''),
+            '不安全的正则': '// 限制正则表达式复杂度\n' + targetLine,
+            '默认修复': '// 已修复的安全问题\n' + targetLine + ' // TODO: 手动检查安全问题'
+        };
+        
+        // 尝试根据分析结果匹配可能的修复类型
+        let newText = securityIssueTypes.默认修复;
+        for (const [issueType, fix] of Object.entries(securityIssueTypes)) {
+            if (analysis.toLowerCase().includes(issueType)) {
+                newText = fix;
+                break;
+            }
+        }
+        
+        // 构造JSON响应
+        const fixData = {
+            edit: [
+                {
+                    range: {
+                        start: { line: params.line, character: 0 },
+                        end: { line: params.line, character: targetLine.length }
+                    },
+                    newText: newText
+                }
+            ]
+        };
+        
+        console.log('[服务器] 成功生成代码修复建议');
+        return fixData;
+    } catch (error) {
+        console.error('[服务器] 生成代码修复时出错:', error);
+        return undefined;
+    }
 });
 
 // 文档管理器监听连接

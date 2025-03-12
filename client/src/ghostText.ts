@@ -39,6 +39,17 @@ export class GhostTextProvider implements vscode.InlineCompletionItemProvider {
       return null;
     }
 
+    // 获取配置
+    const config = vscode.workspace.getConfiguration('securityAssistant');
+    const enableGhostText = config.get<boolean>('enableGhostText', true);
+    const debounceTime = config.get<number>('ghostTextDebounceTime', 300);
+    
+    // 如果在配置中禁用，返回空
+    if (!enableGhostText) {
+      console.log('[GhostText] 在配置中禁用');
+      return null;
+    }
+
     console.log('[GhostText] 请求代码补全，位置:', position.line, position.character);
 
     // 如果用户正在快速输入，则不提供建议
@@ -96,7 +107,9 @@ export class GhostTextProvider implements vscode.InlineCompletionItemProvider {
                     const textBeforeCursor = lineText.substring(0, position.character);
                     
                     // 获取插入文本
-                    const insertText = item.insertText as string;
+                    const insertText = typeof item.insertText === 'string' 
+                      ? item.insertText 
+                      : item.label.toString();
                     
                     // 检查是否有重复
                     if (insertText.startsWith(textBeforeCursor)) {
@@ -206,7 +219,7 @@ export class GhostTextProvider implements vscode.InlineCompletionItemProvider {
           console.error('[GhostText] 请求失败:', error);
           resolve(null);
         }
-      }, 300); // 300ms的防抖延迟
+      }, debounceTime); // 使用配置中的防抖时间
     });
   }
 

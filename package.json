@@ -39,7 +39,7 @@
 			"activitybar": [
 				{
 					"id": "security-assistant",
-					"title": "安全编码助手",
+					"title": "Code Supervisor",
 					"icon": "$(shield)"
 				}
 			]
@@ -53,8 +53,7 @@
 				},
 				{
 					"id": "security-assistant.diagnostics",
-					"name": "诊断问题",
-					"when": "security-assistant.hasDiagnostics"
+					"name": "诊断问题"
 				}
 			]
 		},
@@ -62,12 +61,12 @@
 			{
 				"command": "security-assistant.analyzeCode",
 				"title": "分析代码安全性",
-				"category": "安全编码助手"
+				"category": "Code Supervisor"
 			},
 			{
 				"command": "security-assistant.toggleGhostText",
 				"title": "切换安全建议自动补全",
-				"category": "安全编码助手"
+				"category": "Code Supervisor"
 			},
 			{
 				"command": "security-assistant.switchLLMProvider",
@@ -80,7 +79,7 @@
 			{
 				"command": "security-assistant.importCustomKnowledge",
 				"title": "导入自定义安全知识库",
-				"category": "安全编码助手"
+				"category": "Code Supervisor"
 			},
 			{
 				"command": "security-assistant.workSpaceFullCode",
@@ -115,15 +114,12 @@
 				{
 					"command": "security-assistant.analyzeCode",
 					"when": "editorTextFocus",
-					"group": "navigation"
+					"group": "security-assistant@1"
 				},
 				{
-				  "command": "security-assistant.workSpaceFullCode",
-				  "title": "当前工作区完整代码安全性检查"
-				},
-				{
-				  "command": "security-assistant.fullCode",
-				  "title": "当前文档完整代码安全性检查"
+					"command": "security-assistant.workSpaceFullCode",
+					"when": "editorTextFocus",
+					"group": "security-assistant@2"
 				}
 			],
 			"view/title": [
@@ -147,7 +143,7 @@
 			]
 		},
 		"configuration": {
-			"title": "安全编码助手",
+			"title": "Code Supervisor",
 			"properties": {
 				"securityAssistant.maxNumberOfProblems": {
 					"type": "number",
@@ -163,6 +159,16 @@
 					"type": "boolean",
 					"default": true,
 					"description": "启用Ghost Text自动补全"
+				},
+				"securityAssistant.ghostTextDebounceTime": {
+					"type": "number",
+					"default": 300,
+					"description": "Ghost Text防抖时间(毫秒)"
+				},
+				"securityAssistant.autoAnalyzeOnStartup": {
+					"type": "boolean",
+					"default": true,
+					"description": "扩展激活时自动分析当前打开的文档"
 				},
 				"securityAssistant.supportedLanguages": {
 					"type": "array",

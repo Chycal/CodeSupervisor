@@ -51,6 +51,7 @@ const sqlInjectionRule: SecurityRule = {
       let match;
       while ((match = pattern.exec(text)) !== null) {
         diagnostics.push({
+          code: 'SQLInjection',
           severity: DiagnosticSeverity.Error,
           range: {
             start: document.positionAt(match.index),
@@ -87,6 +88,7 @@ const xssVulnerabilityRule: SecurityRule = {
       let match;
       while ((match = pattern.exec(text)) !== null) {
         diagnostics.push({
+          code: 'XSS',
           severity: DiagnosticSeverity.Warning,
           range: {
             start: document.positionAt(match.index),
@@ -122,6 +124,7 @@ const sensitiveDataRule: SecurityRule = {
       let match;
       while ((match = pattern.exec(text)) !== null) {
         diagnostics.push({
+          code: 'DataLeakage',
           severity: DiagnosticSeverity.Warning,
           range: {
             start: document.positionAt(match.index),

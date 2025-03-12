@@ -7,6 +7,7 @@ export interface SecurityIssue {
   rule?: string;
   code?: string;
   filename: string;
+  source?: string;  // 诊断来源，例如 "CodeSupervisior"
 }
 
 export interface AnalysisResult {

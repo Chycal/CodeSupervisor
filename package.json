@@ -35,6 +35,29 @@
 	],
 	"main": "./client/out/extension",
 	"contributes": {
+		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "security-assistant",
+					"title": "安全编码助手",
+					"icon": "$(shield)"
+				}
+			]
+		},
+		"views": {
+			"security-assistant": [
+				{
+					"type": "webview",
+					"id": "security-assistant.securityDashboard",
+					"name": "安全面板"
+				},
+				{
+					"id": "security-assistant.diagnostics",
+					"name": "诊断问题",
+					"when": "security-assistant.hasDiagnostics"
+				}
+			]
+		},
 		"commands": [
 			{
 				"command": "security-assistant.analyzeCode",
@@ -66,6 +89,25 @@
 			{
 				"command": "security-assistant.fullCode",
 				"title": "当前文档完整代码安全性检查"
+			},
+			{
+				"command": "security-assistant.diagnostics.refresh",
+				"title": "刷新",
+				"icon": "$(refresh)"
+			},
+			{
+				"command": "security-assistant.diagnostics.clear",
+				"title": "清除所有诊断问题",
+				"icon": "$(clear-all)"
+			},
+			{
+				"command": "security-assistant.diagnostics.gotoIssue",
+				"title": "跳转到问题位置"
+			},
+			{
+				"command": "security-assistant.diagnostics.fixIssue",
+				"title": "修复问题",
+				"icon": "$(debug-start)"
 			}
 		],
 		"menus": {
@@ -82,6 +124,25 @@
 				{
 				  "command": "security-assistant.fullCode",
 				  "title": "当前文档完整代码安全性检查"
+				}
+			],
+			"view/title": [
+				{
+					"command": "security-assistant.diagnostics.refresh",
+					"when": "view == security-assistant.diagnostics",
+					"group": "navigation"
+				},
+				{
+					"command": "security-assistant.diagnostics.clear",
+					"when": "view == security-assistant.diagnostics",
+					"group": "navigation"
+				}
+			],
+			"view/item/context": [
+				{
+					"command": "security-assistant.diagnostics.fixIssue",
+					"when": "view == security-assistant.diagnostics && viewItem == issue",
+					"group": "inline"
 				}
 			]
 		},

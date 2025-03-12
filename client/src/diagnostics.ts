@@ -79,7 +79,7 @@ export class DiagnosticsHandler {
   }
 
   private mapSeverity(severity: string): vscode.DiagnosticSeverity {
-    const severityMap: { [key: string]: vscode.DiagnosticSeverity } = {
+    const severityMap: Record<string, vscode.DiagnosticSeverity> = {
       critical: vscode.DiagnosticSeverity.Error,
       high: vscode.DiagnosticSeverity.Error,
       medium: vscode.DiagnosticSeverity.Warning,

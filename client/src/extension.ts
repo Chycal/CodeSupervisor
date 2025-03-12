@@ -17,7 +17,9 @@ import {
 	TextEditorRevealType,
 	MarkdownString,
 	StatusBarItem, 
-	StatusBarAlignment
+	StatusBarAlignment,
+	Diagnostic,
+	DiagnosticCollection
 } from 'vscode';
 
 import {
@@ -28,98 +30,15 @@ import {
 	Trace
 } from 'vscode-languageclient/node';
 import * as vscode from 'vscode';
-import * as fs from 'fs';
 import { DiagnosticsHandler, DiagnosticProvider } from "./diagnostics";
 import { SecurityAnalyzer } from "./analyzer";
 import { SecurityIssue } from './types';
 // 导入Ghost Text提供程序
 import { GhostTextProvider } from './ghostText';
-
-// ------------------新增函数-用于创建panel--------------------------
-//#region 
-// 全局变量的panel
-const panel:Record<string, vscode.WebviewPanel>={};
-function getWebviewContent(context: vscode.ExtensionContext, panel: vscode.WebviewPanel): string {
-    // 获取 CSS 文件路径
-    const cssPath = vscode.Uri.file(path.join(context.extensionPath, 'client/src/assets', 'dashboard.css'));
-    const cssUri = panel.webview.asWebviewUri(cssPath);
-
-    // 获取 HTML 文件路径
-    const htmlPath = vscode.Uri.file(path.join(context.extensionPath, 'client/src/view', 'dashboard.html'));
-    // const htmlUri = panel.webview.asWebviewUri(htmlPath);
-
-    // 读取 HTML 文件内容
-    let htmlContent = fs.readFileSync(htmlPath.fsPath, 'utf-8');
-
-    // 打印 CSS 和 HTML URI
-    //console.log('CSS URI:', cssUri.toString());
-    //console.log('HTML URI:', htmlPath.fsPath);
-
-    // 将 CSS 路径嵌入到 HTML 中
-    htmlContent = htmlContent.replace('<link rel="stylesheet" href="dashboard.css">', `<link rel="stylesheet" href="${cssUri}">`);
-    //console.log('替换后的 HTML 内容:', htmlContent);
-    
-    return htmlContent;
-}
-
-// 加载数据,将漏洞数据发送给webview
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function loadData(panel: vscode.WebviewPanel, vulnerabilities: any, score: number) {
-    // 发送包含漏洞数据和评分的刷新命令
-    panel.webview.postMessage({
-        command: 'refresh',
-        issues: vulnerabilities,
-        score: score,
-    });
-}
-
-// 定位到代码行
-function gotoLine(line: number) {
-    const editor = vscode.window.activeTextEditor;
-    if (editor) {
-        const position = new vscode.Position(line - 1, 0);
-        editor.revealRange(new vscode.Range(position, position));
-    }
-}
-
-// 用于分析函数打开自己的panel
-function openPanel(context: vscode.ExtensionContext,uri:string){
-    console.log('正在创建 Webview...');
-    if(panel[uri]){
-        vscode.window.showWarningMessage(
-            "CodeSupervisior: 当前文件面板已存在"
-          );
-          return;
-    }
-    //创建Webview面板
-    panel[uri] = vscode.window.createWebviewPanel(
-        'securityDashboard', // 面板ID
-        '安全看板', // 面板标题
-        vscode.ViewColumn.Beside, // 显示位置
-        {
-            enableScripts: true, // 启用 JavaScript
-            localResourceRoots: [vscode.Uri.file(path.join(context.extensionPath, 'client/src'))],// 允许加载本地资源
-            retainContextWhenHidden: true, // 关闭时保留状态
-        }
-    );
-    console.log('Webview 已创建');
-    // 加载HTML内容
-    panel[uri].webview.html = getWebviewContent(context, panel[uri]);
-
-    // 监听Webview消息
-    panel[uri].webview.onDidReceiveMessage(message => {
-        switch (message.command) {
-            case 'refresh':
-                //loadData(panel);
-                break;
-            case 'gotoLine':
-                gotoLine(message.line);
-                break;
-        }
-    });
-}
-//#endregion
-// ------------------END----------------------------------------------
+// 导入安全侧边栏提供者
+import { SecuritySidebarProvider } from './securitySidebar';
+// 导入诊断视图提供者
+import { DiagnosticTreeDataProvider, DiagnosticItem } from './diagnosticView';
 
 // 语言服务器
 let client: LanguageClient;
@@ -127,9 +46,76 @@ let client: LanguageClient;
 // LLM提供者状态栏
 let llmProviderStatusBar: StatusBarItem;
 
+// 安全侧边栏提供者
+let securitySidebarProvider: SecuritySidebarProvider;
+
+// 诊断树视图提供者
+let diagnosticTreeProvider: DiagnosticTreeDataProvider;
+
+// 将VSCode诊断转换为SecurityIssue
+function convertDiagnosticsToIssues(diagnostics: Map<string, Diagnostic[]>): SecurityIssue[] {
+    const issues: SecurityIssue[] = [];
+    
+    diagnostics.forEach((diags, uri) => {
+        const fileUri = Uri.parse(uri);
+        const fileName = fileUri.fsPath;
+        
+        diags.forEach(diag => {
+            // 确定严重性
+            let severity: "critical" | "high" | "medium" | "low";
+            switch (diag.severity) {
+                case vscode.DiagnosticSeverity.Error:
+                    severity = 'critical';
+                    break;
+                case vscode.DiagnosticSeverity.Warning:
+                    severity = 'high';
+                    break;
+                case vscode.DiagnosticSeverity.Information:
+                    severity = 'medium';
+                    break;
+                default:
+                    severity = 'low';
+                    break;
+            }
+            
+            issues.push({
+                id: `${uri}:${diag.range.start.line}:${diag.range.start.character}`,
+                message: diag.message,
+                severity: severity,
+                line: diag.range.start.line + 1, // 转为1-based
+                column: diag.range.start.character + 1, // 转为1-based
+                rule: diag.code?.toString() || 'unknown',
+                filename: fileName
+            });
+        });
+    });
+    
+    return issues;
+}
+
 export function activate(context: ExtensionContext) {
 	// 添加日志输出
 	console.log('安全编码助手扩展已激活');
+
+	// 初始化侧边栏提供者
+	securitySidebarProvider = new SecuritySidebarProvider(context.extensionUri);
+	context.subscriptions.push(
+		vscode.window.registerWebviewViewProvider(
+			SecuritySidebarProvider.viewType,
+			securitySidebarProvider
+		)
+	);
+	
+	// 初始化诊断树视图提供者
+	diagnosticTreeProvider = new DiagnosticTreeDataProvider();
+	const diagnosticsView = vscode.window.createTreeView('security-assistant.diagnostics', {
+		treeDataProvider: diagnosticTreeProvider,
+		showCollapseAll: true
+	});
+	context.subscriptions.push(diagnosticsView);
+	
+	// 初始默认没有诊断
+	vscode.commands.executeCommand('setContext', 'security-assistant.hasDiagnostics', false);
 
 	// -----------------------------语言服务器-----------------------
 	// #region
@@ -199,6 +185,135 @@ export function activate(context: ExtensionContext) {
 	// 启动客户端，这同时也会启动服务器
 	client.start().then(() => {
 		console.log('语言服务器已启动');
+		
+		// 监听诊断变化，更新树视图
+		const diagnostics: DiagnosticCollection = languages.createDiagnosticCollection('security-assistant');
+		context.subscriptions.push(diagnostics);
+		
+		// 注册诊断通知处理器
+		client.onNotification('security-assistant/publishDiagnostics', (params: { uri: string, diagnostics: Diagnostic[] }) => {
+			const uri = Uri.parse(params.uri);
+			diagnostics.set(uri, params.diagnostics);
+			
+			// 更新诊断树视图
+			const allDiagnostics = new Map<string, Diagnostic[]>();
+			
+			// 使用languages.getDiagnostics()获取所有诊断信息
+			// 这是VS Code推荐的API
+			const allDiagnosticsArr = languages.getDiagnostics();
+			for (const [docUri, diags] of allDiagnosticsArr) {
+				if (diags && diags.length > 0) {
+					// 创建诊断副本，确保数组可变
+					allDiagnostics.set(docUri.toString(), [...diags]);
+				}
+			}
+			
+			const issues = convertDiagnosticsToIssues(allDiagnostics);
+			diagnosticTreeProvider.updateIssues(issues);
+			
+			// 更新状态上下文
+			vscode.commands.executeCommand('setContext', 'security-assistant.hasDiagnostics', issues.length > 0);
+		});
+		
+		// 注册跳转到问题位置命令
+		context.subscriptions.push(
+			commands.registerCommand('security-assistant.diagnostics.gotoIssue', (issue: SecurityIssue) => {
+				// 打开文件并跳转到问题位置
+				vscode.workspace.openTextDocument(issue.filename).then(doc => {
+					vscode.window.showTextDocument(doc).then(editor => {
+						const position = new vscode.Position(issue.line - 1, issue.column - 1);
+						const range = new vscode.Range(position, position);
+						editor.selection = new vscode.Selection(position, position);
+						editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+					});
+				});
+			})
+		);
+		
+		// 注册刷新诊断命令
+		context.subscriptions.push(
+			commands.registerCommand('security-assistant.diagnostics.refresh', () => {
+				// 重新验证所有打开的文档
+				vscode.workspace.textDocuments.forEach(doc => {
+					if (doc.languageId === 'javascript' || 
+						doc.languageId === 'typescript' || 
+						doc.languageId === 'python' || 
+						doc.languageId === 'java' || 
+						doc.languageId === 'php' || 
+						doc.languageId === 'ruby' || 
+						doc.languageId === 'plaintext') {
+						client.sendNotification('textDocument/didChange', {
+							textDocument: {
+								uri: doc.uri.toString(),
+								version: doc.version
+							},
+							contentChanges: [{ text: doc.getText() }]
+						});
+					}
+				});
+				vscode.window.showInformationMessage('已刷新诊断信息');
+			})
+		);
+		
+		// 注册清除诊断命令
+		context.subscriptions.push(
+			commands.registerCommand('security-assistant.diagnostics.clear', () => {
+				diagnostics.clear();
+				diagnosticTreeProvider.clearIssues();
+				vscode.commands.executeCommand('setContext', 'security-assistant.hasDiagnostics', false);
+				vscode.window.showInformationMessage('已清除所有诊断问题');
+			})
+		);
+		
+		// 注册修复问题命令
+		context.subscriptions.push(
+			commands.registerCommand('security-assistant.diagnostics.fixIssue', async (item: DiagnosticItem) => {
+				if (!item.issue) {
+					return;
+				}
+				
+				// 获取修复建议
+				try {
+					interface CodeFix {
+						edit: {
+							range: {
+								start: { line: number, character: number },
+								end: { line: number, character: number }
+							},
+							newText: string
+						}[];
+					}
+					
+					const response = await client.sendRequest('security-assistant/getCodeFix', {
+						uri: vscode.Uri.file(item.issue.filename).toString(),
+						line: item.issue.line - 1,
+						character: item.issue.column - 1
+					}) as CodeFix | undefined;
+					
+					if (response && response.edit) {
+						// 应用编辑
+						const workspaceEdit = new vscode.WorkspaceEdit();
+						const uri = vscode.Uri.file(item.issue.filename);
+						
+						response.edit.forEach((edit) => {
+							const range = new vscode.Range(
+								new vscode.Position(edit.range.start.line, edit.range.start.character),
+								new vscode.Position(edit.range.end.line, edit.range.end.character)
+							);
+							workspaceEdit.replace(uri, range, edit.newText);
+						});
+						
+						await vscode.workspace.applyEdit(workspaceEdit);
+						vscode.window.showInformationMessage('已修复问题');
+					} else {
+						vscode.window.showWarningMessage('无法自动修复此问题');
+					}
+				} catch (error) {
+					console.error('修复问题时出错:', error);
+					vscode.window.showErrorMessage(`修复问题失败: ${error}`);
+				}
+			})
+		);
 		
 		// 在客户端启动后注册Ghost Text提供程序
 		const ghostTextProvider = new GhostTextProvider(client);
@@ -277,61 +392,24 @@ export function activate(context: ExtensionContext) {
 						const content = new MarkdownString(responseText);
 						content.isTrusted = true;
 						
-						// 显示分析结果
-						const panel = window.createWebviewPanel(
-							'securityAnalysis',
-							'代码安全分析',
-							{ viewColumn: window.activeTextEditor?.viewColumn || 1, preserveFocus: true },
-							{ enableScripts: true, enableCommandUris: true }
-						);
+						// 在侧边栏中显示分析结果
+						securitySidebarProvider.updateIssues([
+							{
+								id: "analysis-result",
+								severity: "medium", // 使用正确的枚举值
+								message: responseText,
+								filename: document.fileName,
+								line: 1,
+								column: 1,
+								code: "SECURITY_ANALYSIS"
+							}
+						], 90);
 						
-						// 改进HTML渲染方式
-						panel.webview.html = `
-						<!DOCTYPE html>
-						<html lang="zh">
-						<head>
-							<meta charset="UTF-8">
-							<meta name="viewport" content="width=device-width, initial-scale=1.0">
-							<title>代码安全分析</title>
-							<style>
-								body {
-									font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-									line-height: 1.6;
-									padding: 16px;
-									max-width: 800px;
-									margin: 0 auto;
-								}
-								h1 { color: #2c3e50; font-size: 24px; border-bottom: 1px solid #eaecef; padding-bottom: 8px; }
-								h2 { color: #3498db; font-size: 20px; margin-top: 24px; }
-								h3 { color: #e74c3c; font-size: 18px; }
-								pre {
-									background-color: #f6f8fa;
-									border-radius: 6px;
-									padding: 16px;
-									overflow: auto;
-								}
-								code {
-									font-family: 'Courier New', Courier, monospace;
-								}
-								.warning { color: #e74c3c; }
-								.info { color: #3498db; }
-							</style>
-						</head>
-						<body>
-							<h1>代码安全分析结果</h1>
-							<div class="content">
-								${responseText
-									.replace(/\n\n/g, '</p><p>')
-									.replace(/\n/g, '<br>')
-									.replace(/#{3} (.*?)$/gm, '<h3>$1</h3>')
-									.replace(/#{2} (.*?)$/gm, '<h2>$1</h2>')
-									.replace(/#{1} (.*?)$/gm, '<h1>$1</h1>')
-									.replace(/`{3}([\s\S]*?)`{3}/g, '<pre><code>$1</code></pre>')
-									.replace(/`(.*?)`/g, '<code>$1</code>')}
-							</div>
-						</body>
-						</html>
-						`;
+						// 显示提示
+						window.showInformationMessage("安全分析结果已在侧边栏中显示");
+						
+						// 聚焦到侧边栏视图
+						commands.executeCommand('security-assistant.securityDashboard.focus');
 					} catch (error) {
 						console.error('分析代码时出错:', error);
 						window.showErrorMessage('无法分析代码安全性');
@@ -610,9 +688,15 @@ export function activate(context: ExtensionContext) {
                     // 更新分析结果
                     diagnosticsHandler.updateDiagnostics(document, result.issues);
 
-                    // 将分析结果上传到面板中
-                    openPanel(context,document.uri.toString());
-                    loadData(panel[document.uri.toString()]!,result.issues,80);
+                    // 将分析结果更新到侧边栏
+                    securitySidebarProvider.updateIssues(result.issues, 80);
+                    
+                    // 同时更新诊断树视图
+                    diagnosticTreeProvider.updateIssues(result.issues);
+                    vscode.commands.executeCommand('setContext', 'security-assistant.hasDiagnostics', result.issues.length > 0);
+                    
+                    // 确保侧边栏视图可见
+                    await vscode.commands.executeCommand('security-assistant.securityDashboard.focus');
                   }
                 );
               } catch (error) {
@@ -693,9 +777,16 @@ export function activate(context: ExtensionContext) {
                 // Continue with next file
                 }
             }
-            //上传至面板
-            openPanel(context,workspaceURI.toString());
-            loadData(panel[workspaceURI.toString()],allIssues,80);
+            
+            // 将分析结果更新到侧边栏
+            securitySidebarProvider.updateIssues(allIssues, 80);
+            
+            // 同时更新诊断树视图
+            diagnosticTreeProvider.updateIssues(allIssues);
+            vscode.commands.executeCommand('setContext', 'security-assistant.hasDiagnostics', allIssues.length > 0);
+            
+            // 确保侧边栏视图可见
+            await vscode.commands.executeCommand('security-assistant.securityDashboard.focus');
             }
         );
         } catch (error) {

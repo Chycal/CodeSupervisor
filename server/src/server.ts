@@ -278,64 +278,13 @@ documents.onDidChangeContent(change => {
 
 // 验证文档内容
 async function validateTextDocument(textDocument: TextDocument): Promise<void> {
-	// 获取文档设置
-	const settings = await getDocumentSettings(textDocument.uri);
-	
-	// 为文档运行安全规则
-	console.log(`[服务器] 正在检查文档安全: ${textDocument.uri}`);
-	
-	// 运行安全规则检查
-	const securityDiagnostics = await runSecurityRules(textDocument);
-	
-	// 记录检测到的问题
-	console.log(`[服务器] 检测到 ${securityDiagnostics.length} 个安全问题`);
-	if (securityDiagnostics.length > 0) {
-		console.log(`[服务器] 安全问题类型: ${securityDiagnostics.map(d => d.message).join(', ')}`);
-	}
-	
-	// 基本的大写单词诊断规则（示例中的功能）
-	const text = textDocument.getText();
-	const pattern = /\b[A-Z]{2,}\b/g;
-	let m: RegExpExecArray | null;
-
-	let problems = 0;
-	const basicDiagnostics: Diagnostic[] = [];
-	while ((m = pattern.exec(text)) && problems < settings.maxNumberOfProblems) {
-		problems++;
-		const diagnostic: Diagnostic = {
-			severity: DiagnosticSeverity.Information,
-			range: {
-				start: textDocument.positionAt(m.index),
-				end: textDocument.positionAt(m.index + m[0].length)
-			},
-			message: `${m[0]} 是全大写的。`,
-			source: 'security-assistant'
-		};
-		if (hasDiagnosticRelatedInformationCapability) {
-			diagnostic.relatedInformation = [
-				{
-					location: {
-						uri: textDocument.uri,
-						range: Object.assign({}, diagnostic.range)
-					},
-					message: '命名很重要'
-				}
-			];
-		}
-		basicDiagnostics.push(diagnostic);
-	}
-	
-	// 合并所有诊断结果
-	const allDiagnostics: Diagnostic[] = [];
-	for (const diagnostic of securityDiagnostics) {
-		allDiagnostics.push(diagnostic);
-	}
-	for (const diagnostic of basicDiagnostics) {
-		allDiagnostics.push(diagnostic);
-	}
-	
-	// 将诊断信息发送到客户端
-	connection.sendDiagnostics({ uri: textDocument.uri, diagnostics: allDiagnostics });
+	// 这个函数不再发送诊断信息，因为我们使用connection.languages.diagnostics来处理诊断
+	// 避免重复的诊断信息
+	console.log(`[服务器] 文档内容变化，将由诊断程序处理: ${textDocument.uri}`);
+	// 等待一小段时间后刷新诊断，以确保变更被处理
+	setTimeout(() => {
+		connection.languages.diagnostics.refresh();
+	}, 100);
 }
 
 // 处理代码操作请求（提供修复建议）

@@ -1,1 +1,1 @@
-{"root":["./src/documentmodel.ts","./src/knowledgebase.ts","./src/llmintegration.ts","./src/securityrules.ts","./src/server.ts","./src/config/modelconfig.ts","./src/test/llmintegration.test.ts","./src/test/securityrules.test.ts"],"errors":true,"version":"5.8.2"}
+{"root":["./src/documentmodel.ts","./src/knowledgebase.ts","./src/llmintegration.ts","./src/securityrules.ts","./src/server.ts","./src/config/modelconfig.ts","./src/test/llmintegration.test.ts","./src/test/securityrules.test.ts"],"version":"5.8.2"}

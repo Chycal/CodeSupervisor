@@ -4,7 +4,11 @@ function unsafeQuery(userId) {
     const query = "SELECT * FROM users WHERE id = " + userId;
     return executeQuery(query);
 }
-
+function unsafeQuery(userId) {
+    // 不安全：直接拼接SQL
+    const query = "SELECT * FROM users WHERE id = " + userId;
+    return executeQuery(query);
+}
 // XSS测试
 function unsafeHtml(userInput) {
     // 不安全：直接设置innerHTML

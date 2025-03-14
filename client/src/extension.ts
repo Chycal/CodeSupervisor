@@ -287,7 +287,7 @@ export function activate(context: ExtensionContext) {
 			const issues = convertDiagnosticsToIssues(allDiagnostics);
 			log(`[诊断转换] 转换后的SecurityIssue数量: ${issues.length}`);
 			
-			// 确保至少使用当前收到的诊断
+			// 更新诊断树视图
 			diagnosticTreeProvider.updateIssues(issues);
 			
 			// 更新状态上下文
@@ -296,6 +296,17 @@ export function activate(context: ExtensionContext) {
 			// 如果有问题但树视图为空，则尝试手动触发更新
 			if (issues.length > 0) {
 				log('[诊断更新] 发现问题，确保树视图更新');
+				// 立即更新诊断树视图，不依赖定时器
+				updateDiagnosticTreeView();
+			}
+			
+			// 计算安全评分
+			const securityScore = calculateSecurityScore(issues);
+			
+			// 更新安全仪表盘数据
+			if (securitySidebarProvider) {
+				log('[诊断更新] 更新安全仪表盘数据');
+				securitySidebarProvider.updateIssues(issues, securityScore);
 			}
 		});
 		
@@ -982,14 +993,18 @@ export function activate(context: ExtensionContext) {
 	//#endregion
 	// -----------------------------END------------------------------
 
-	// 定时更新诊断树视图
-	const diagnosticTreeUpdateInterval = setInterval(() => {
-		log('[诊断更新] 定时更新诊断树视图');
-		updateDiagnosticTreeView();
-	}, 2000); // 每2秒更新一次
-
-	// 确保在扩展停用时清除定时器
-	context.subscriptions.push({ dispose: () => clearInterval(diagnosticTreeUpdateInterval) });
+	// 替换为：在文件变化时更新诊断
+	// 监听文件变更事件，仅在文件变化时更新诊断
+	const fileWatcher = workspace.createFileSystemWatcher('**/*.{js,ts,py,java,php,rb,txt}');
+	context.subscriptions.push(
+		fileWatcher.onDidChange((uri) => {
+			log(`[文件变更] 检测到文件变更: ${uri.toString()}`);
+			// 延迟更新，避免频繁触发
+			setTimeout(() => updateDiagnosticTreeView(), 1000);
+		})
+	);
+	// 确保在扩展停用时清除文件监听器
+	context.subscriptions.push(fileWatcher);
 }
 
 // 更新LLM提供者状态栏
@@ -1014,39 +1029,87 @@ async function updateLLMProviderStatus() {
 
 // 辅助函数：统一更新诊断树视图
 function updateDiagnosticTreeView() {
-	// 获取所有诊断
-	const allDiagnostics = new Map<string, Diagnostic[]>();
-	const allDiagnosticsArr = languages.getDiagnostics();
-	
-	log(`[诊断视图更新] VS Code API返回诊断数组长度: ${allDiagnosticsArr.length}`);
-	
-	// 记录有多少文件包含诊断
-	let filesWithDiagnostics = 0;
-	let totalDiagnosticCount = 0;
-	
-	for (const [docUri, diags] of allDiagnosticsArr) {
-		if (diags && diags.length > 0) {
-			log(`[诊断视图更新] 文件 ${docUri.toString()} 有 ${diags.length} 个诊断`);
-			filesWithDiagnostics++;
-			totalDiagnosticCount += diags.length;
-			
-			allDiagnostics.set(docUri.toString(), [...diags]);
+	try {
+		// 获取所有诊断
+		const allDiagnostics = new Map<string, Diagnostic[]>();
+		const allDiagnosticsArr = languages.getDiagnostics();
+		
+		log(`[诊断视图更新] VS Code API返回诊断数组长度: ${allDiagnosticsArr.length}`);
+		
+		// 记录有多少文件包含诊断
+		let filesWithDiagnostics = 0;
+		let totalDiagnosticCount = 0;
+		
+		for (const [docUri, diags] of allDiagnosticsArr) {
+			if (diags && diags.length > 0) {
+				log(`[诊断视图更新] 文件 ${docUri.toString()} 有 ${diags.length} 个诊断`);
+				filesWithDiagnostics++;
+				totalDiagnosticCount += diags.length;
+				
+				allDiagnostics.set(docUri.toString(), [...diags]);
+			}
 		}
+		
+		log(`[诊断视图更新] 总计: ${filesWithDiagnostics} 个文件有诊断，共 ${totalDiagnosticCount} 个诊断项`);
+		
+		// 转换并更新
+		const issues = convertDiagnosticsToIssues(allDiagnostics);
+		log(`[诊断树视图更新] 找到 ${issues.length} 个安全问题`);
+		
+		// 更新诊断树视图
+		diagnosticTreeProvider.updateIssues(issues);
+		vscode.commands.executeCommand('setContext', 'security-assistant.hasDiagnostics', issues.length > 0);
+		
+		// 如果有安全问题，在状态栏显示
+		if (issues.length > 0) {
+			updateStatusBarMessage(`发现 ${issues.length} 个安全问题`, 5000);
+		}
+		
+		// 计算安全评分 - 基于问题的严重性和数量
+		const securityScore = calculateSecurityScore(issues);
+		log(`[安全评分] 计算得分: ${securityScore}, 基于 ${issues.length} 个问题`);
+		
+		// 更新安全仪表盘
+		if (securitySidebarProvider) {
+			// 确保同步更新安全仪表盘
+			securitySidebarProvider.updateIssues(issues, securityScore);
+			log(`[安全仪表盘] 已更新问题数据和评分`);
+		} else {
+			log(`[安全仪表盘] 提供者未初始化，无法更新`);
+		}
+	} catch (error) {
+		console.error('[诊断更新] 更新诊断视图时出错:', error);
+	}
+}
+
+/**
+ * 计算安全评分
+ * 根据问题的严重性和数量计算一个0-100的分数
+ */
+function calculateSecurityScore(issues: SecurityIssue[]): number {
+	if (issues.length === 0) {
+		return 100; // 没有问题则满分
 	}
 	
-	log(`[诊断视图更新] 总计: ${filesWithDiagnostics} 个文件有诊断，共 ${totalDiagnosticCount} 个诊断项`);
+	// 各个级别问题的权重
+	const weights = {
+		critical: 10,
+		high: 5,
+		medium: 2,
+		low: 1
+	};
 	
-	// 转换并更新
-	const issues = convertDiagnosticsToIssues(allDiagnostics);
-	log(`[诊断树视图更新] 找到 ${issues.length} 个安全问题`);
+	// 计算减分总和
+	let deduction = 0;
+	issues.forEach(issue => {
+		deduction += weights[issue.severity] || 0;
+	});
 	
-	diagnosticTreeProvider.updateIssues(issues);
-	vscode.commands.executeCommand('setContext', 'security-assistant.hasDiagnostics', issues.length > 0);
+	// 将减分限制在0-100范围内，确保分数不会为负
+	deduction = Math.min(deduction, 100);
 	
-	// 如果有安全问题，在状态栏显示
-	if (issues.length > 0) {
-		updateStatusBarMessage(`发现 ${issues.length} 个安全问题`, 5000);
-	}
+	// 返回最终分数
+	return Math.max(0, 100 - deduction);
 }
 
 export function deactivate(): Thenable<void> | undefined {

@@ -1,70 +1,710 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
-    <!-- 在HTML中，路径中的分隔符应该使用正斜杠 / -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
-   <link rel="stylesheet" href="dashboard.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 使用固定版本的Chart.js和datalabels插件 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.1.0"></script>
+    <script>
+        // 检查Chart.js和ChartDataLabels是否正确加载
+        window.addEventListener('load', function() {
+            if (!window.Chart) {
+                console.error("Chart.js未能正确加载!");
+                const statusBar = document.getElementById('statusBar');
+                if (statusBar) {
+                    statusBar.textContent = "图表库加载失败，请刷新页面";
+                }
+            } else {
+                console.log("Chart.js版本:", Chart.version);
+            }
+            
+            if (!window.ChartDataLabels) {
+                console.error("ChartDataLabels插件未能正确加载!");
+            } else {
+                console.log("ChartDataLabels插件已加载");
+            }
+            
+            // 注册Chart.js datalabels插件
+            if (window.Chart && window.ChartDataLabels) {
+                console.log("注册Chart.js datalabels插件");
+                Chart.register(ChartDataLabels);
+            } else {
+                console.error("Chart.js或ChartDataLabels未加载!");
+            }
+        });
+    </script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --primary-color: #007acc;
+            --bg-color: var(--vscode-editor-background, #1e1e1e);
+            --text-color: var(--vscode-editor-foreground, #d4d4d4);
+            --border-color: var(--vscode-panel-border, #454545);
+            --card-bg: var(--vscode-editorWidget-background, #252526);
+            --critical-color: #000000;
+            --high-color: #ff4d4f;
+            --medium-color: #faad14;
+            --low-color: #52c41a;
+            --accent-color: #0078d4;
+            --font-small: 11px;
+            --font-medium: 13px;
+            --font-large: 15px;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            padding: 8px;
+            margin: 0;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+            overflow-x: hidden;
+            font-size: var(--font-medium);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            margin-top: 0;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        h1 {
+            font-size: var(--font-large);
+            text-align: center;
+        }
+
+        h3 {
+            font-size: var(--font-medium);
+            margin-bottom: 6px;
+        }
+
+        .dashboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+        }
+
+        .dashboard-header h1 {
+            margin: 0;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            border: 1px solid var(--border-color);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+            cursor: pointer;
+        }
+
+        .card-header h3 {
+            margin: 0;
+        }
+
+        /* 安全评分部分 */
+        .security-metrics {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .metric-card {
+            flex: 1;
+            padding: 8px;
+            text-align: center;
+            background-color: var(--card-bg);
+            border-radius: 4px;
+            margin: 0 4px;
+            border: 1px solid var(--border-color);
+        }
+
+        .metric-card:first-child {
+            margin-left: 0;
+        }
+
+        .metric-card:last-child {
+            margin-right: 0;
+        }
+
+        .metric-value {
+            font-size: var(--font-large);
+            font-weight: bold;
+            margin: 6px 0;
+        }
+
+        .metric-label {
+            font-size: var(--font-small);
+            color: var(--text-color);
+        }
+
+        /* 漏洞图表部分 */
+        .chart-container {
+            height: 40px; /* 增加高度确保图表可见 */
+            width: 100%;
+            position: relative;
+            background-color: rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+            padding: 8px;
+        }
+
+        /* 漏洞列表部分 */
+        .vulnerability-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .vulnerability-item {
+            display: flex;
+            padding: 6px 8px;
+            border-bottom: 1px solid var(--border-color);
+            position: relative;
+        }
+
+        .vulnerability-item:last-child {
+            border-bottom: none;
+        }
+
+        .severity-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-top: 4px;
+            margin-right: 8px;
+            flex-shrink: 0;
+        }
+
+        .critical-severity {
+            background-color: var(--critical-color);
+        }
+
+        .high-severity {
+            background-color: var(--high-color);
+        }
+
+        .medium-severity {
+            background-color: var(--medium-color);
+        }
+
+        .low-severity {
+            background-color: var(--low-color);
+        }
+
+        .content-container {
+            flex-grow: 1;
+            min-width: 0; /* 防止内容溢出 */
+        }
+
+        .title {
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 2px;
+        }
+
+        .file-info {
+            font-size: var(--font-small);
+            color: var(--vscode-descriptionForeground, #8c8c8c);
+        }
+
+        .item-checkbox {
+            margin-left: 8px;
+            align-self: center;
+        }
+
+        .fix-button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 2px;
+            padding: 4px 8px;
+            font-size: var(--font-small);
+            cursor: pointer;
+            margin-top: 10px;
+            width: 100%;
+        }
+
+        .fix-button:hover {
+            opacity: 0.9;
+        }
+
+        .fix-button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .collapsible-content {
+            padding-top: 4px;
+            font-size: var(--font-small);
+            color: var(--vscode-descriptionForeground, #8c8c8c);
+        }
+
+        .star-rating {
+            font-size: var(--font-large);
+            line-height: 1;
+        }
+
+        .score-text {
+            font-size: var(--font-small);
+            color: var(--vscode-descriptionForeground, #8c8c8c);
+        }
+
+        .expand-button {
+            background: none;
+            border: none;
+            color: var(--primary-color);
+            cursor: pointer;
+            padding: 0;
+            font-size: var(--font-small);
+        }
+
+        .checkbox-container {
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .checkbox-container label {
+            font-size: var(--font-small);
+            display: flex;
+            align-items: center;
+        }
+
+        .checkbox-container input {
+            margin-left: 4px;
+        }
+
+        /* 新增样式：可折叠组件 */
+        .collapsible-card {
+            max-height: 1000px;
+            transition: max-height 0.3s ease;
+            overflow: hidden;
+        }
+
+        .collapsible-card.collapsed {
+            max-height: 40px; /* 只显示标题 */
+        }
+
+        .chevron-icon {
+            transition: transform 0.3s ease;
+        }
+
+        .collapsed .chevron-icon {
+            transform: rotate(-90deg);
+        }
+
+        /* 安全建议部分 */
+        .security-suggestion {
+            padding: 10px;
+            font-size: var(--font-small);
+            border-left: 3px solid var(--accent-color);
+            background-color: rgba(0, 120, 212, 0.1);
+        }
+
+        /* 配置选项 */
+        .config-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        /* 开关样式 */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 34px;
+            height: 18px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .3s;
+            border-radius: 18px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 14px;
+            width: 14px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--accent-color);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(16px);
+        }
+
+        .config-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        .config-label {
+            font-size: var(--font-small);
+        }
+
+        .config-value {
+            font-size: var(--font-small);
+            padding: 2px 6px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+        }
+
+        .config-button {
+            background: none;
+            border: none;
+            color: var(--accent-color);
+            cursor: pointer;
+            padding: 0;
+            margin-left: 5px;
+        }
+
+        .upload-button {
+            background-color: transparent;
+            border: 1px dashed var(--border-color);
+            color: var(--text-color);
+            padding: 6px 8px;
+            cursor: pointer;
+            width: 100%;
+            text-align: center;
+            border-radius: 3px;
+            margin-bottom: 8px;
+            font-size: var(--font-small);
+        }
+
+        .upload-button:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        .knowledge-item {
+            display: flex;
+            align-items: center;
+            padding: 4px 0;
+            font-size: var(--font-small);
+        }
+
+        .knowledge-icon {
+            margin-right: 5px;
+            color: var(--accent-color);
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 250px) {
+            .security-metrics {
+                flex-direction: column;
+            }
+            
+            .metric-card {
+                margin: 4px 0;
+            }
+
+            .config-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 </head>
 <body>
-    <div></div>
-    <center><h1>安全看板</h1></center>
-    <div id="security-rating"> 
-        <h3>安全评分</h3>
-        <span class="star" id="starRating">⭐️⭐️⭐️⭐️⭐️</span>
-        <span class="score-text" id="scoreText">(85/100)</span>
-    </div>
-    <div id="vulnerability-number">
-        <div class="vulnerability-number-header">
-            <h3>漏洞数目<h3>
-        </div>
-        <div class="vulnerability-chart-container">
-            <canvas id="vulnerabilityChart"></canvas>
-        </div>
-    </div>
-    <div id="vulnerability-content">
-        <div class="list-header">
-            <h3>漏洞分布</h3>
-            <div class="checkbox-container">
-                <label>全选<input type="checkbox" id="selectAllCheckbox"></label>
+    <!-- 项目安全态势功能区 -->
+    <div class="card collapsible-card" id="securityStatusCard">
+        <div class="card-header" onclick="toggleCollapse('securityStatusCard')">
+            <h3>项目安全态势</h3>
+            <div style="display: flex; align-items: center;">
+                <button id="refreshButton" class="expand-button" style="margin-right: 10px;" onclick="event.stopPropagation()">
+                    <i class="bi bi-arrow-clockwise"></i> 刷新
+                </button>
+                <i class="bi bi-chevron-down chevron-icon"></i>
             </div>
         </div>
-        <ul id="vulnerabilityList" class="vulnerability-list"></ul>
-        <div class="button-container">
-            <button id="repairButton" class="repair-button">一键修复</button>
+        <div class="card-content">
+            <div class="security-metrics">
+                <div class="metric-card">
+                    <div class="metric-label">安全评分</div>
+                    <div class="metric-value" id="securityScore">等待分析</div>
+                    <div class="star-rating" id="starRating">⭐⭐⭐⭐</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">漏洞总数</div>
+                    <div class="metric-value" id="totalVulns">等待分析</div>
+                    <div class="score-text" id="vulnBreakdown"></div>
+                </div>
+            </div>
+            <div class="chart-container">
+                <canvas id="vulnerabilityChart"></canvas>
+            </div> 
+
+            <div class="security-suggestion">
+                <strong>安全建议:</strong> <span id="securitySuggestion">基于当前漏洞分析，建议优先解决SQL注入和命令执行漏洞，这些高风险问题可能导致严重的安全事件。同时关注密码存储方式，使用现代加密算法提高数据安全性。</span>
+            </div>
         </div>
     </div>
 
+    <!-- 大模型功能区 -->
+    <div class="card collapsible-card" id="aiConfigCard">
+        <div class="card-header" onclick="toggleCollapse('aiConfigCard')">
+            <h3>AI 辅助配置</h3>
+            <i class="bi bi-chevron-down chevron-icon"></i>
+        </div>
+        <div class="card-content">
+            <div class="config-grid">
+                <div class="config-item">
+                    <div class="config-label">当前LLM</div>
+                    <div class="config-value">
+                        <span id="currentLLM">DeepSeek</span>
+                        <button class="config-button" id="changeLLMButton">
+                            <i class="bi bi-gear-fill"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="config-item">
+                    <div class="config-label">自动修复</div>
+                    <label class="switch">
+                        <input type="checkbox" id="autoFixToggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
 
+            <div class="config-item">
+                <div class="config-label">RAG知识库</div>
+                <div class="config-value">
+                    <span id="ragStatus">已启用</span>
+                </div>
+            </div>
+
+            <button class="upload-button" id="uploadKnowledgeButton">
+                <i class="bi bi-upload"></i> 上传知识库文档
+            </button>
+
+            <div id="knowledgeList">
+                <div class="knowledge-item">
+                    <i class="bi bi-file-text knowledge-icon"></i>
+                    <span>OWASP Top 10 (2021).pdf</span>
+                </div>
+                <div class="knowledge-item">
+                    <i class="bi bi-file-text knowledge-icon"></i>
+                    <span>安全编码规范.md</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 漏洞列表区域 -->
+    <div class="card collapsible-card" id="vulnerabilityListCard">
+        <div class="card-header" onclick="toggleCollapse('vulnerabilityListCard')">
+            <h3>漏洞列表</h3>
+            <i class="bi bi-chevron-down chevron-icon"></i>
+        </div>
+        <div class="card-content">
+            <div class="checkbox-container">
+                <label>全选<input type="checkbox" id="selectAllCheckbox"></label>
+                <select id="severityFilter">
+                    <option value="all">全部级别</option>
+                    <option value="critical">仅严重</option>
+                    <option value="high">仅高危</option>
+                    <option value="medium">仅中危</option>
+                    <option value="low">仅低危</option>
+                </select>
+        </div>
+        <ul id="vulnerabilityList" class="vulnerability-list"></ul>
+            <button id="repairButton" class="fix-button">修复所选问题</button>
+        </div>
+    </div>
+
+    <!-- 调试工具栏：只在开发时显示 -->
+    <div id="debug-toolbar" style="position: fixed; top: 0; right: 0; background: rgba(0,0,0,0.7); padding: 5px; z-index: 9999; font-size: 10px; display: none;">
+        <button id="debugToggle">调试</button>
+        <button id="forceUpdate">强制更新</button>
+        <div id="debug-info" style="color: white; max-width: 200px; word-break: break-all;"></div>
+    </div>
 
     <script>
         const vscode = acquireVsCodeApi();
-        // 获取数据并渲染页面
+        let allVulnerabilities = []; // 存储所有漏洞，用于筛选
+        let lastReceivedData = null; // 存储最后接收的数据，用于调试
+        // 在页面加载时发送消息表示已准备好接收数据
+        window.addEventListener('load', () => {
+            vscode.postMessage({ command: 'ready' });
+        });
+        // 调试模式
+        let debugMode = false;
 
-        function updateStarRating(score) {
+        // 初始化调试工具栏
+        document.getElementById('debugToggle').addEventListener('click', function() {
+            debugMode = !debugMode;
+            document.getElementById('debug-info').textContent = debugMode ? '调试模式开启' : '';
+        });
+
+        document.getElementById('forceUpdate').addEventListener('click', function() {
+            if (lastReceivedData) {
+                document.getElementById('debug-info').textContent = '强制更新图表...';
+                if (lastReceivedData.vulnerabilityNumber) {
+                    updateVulnerabilityChart(lastReceivedData.vulnerabilityNumber);
+                } else if (lastReceivedData.issues) {
+                    const vulnCounts = {
+                        critical: lastReceivedData.issues.filter(v => v.severity === 'critical').length,
+                        high: lastReceivedData.issues.filter(v => v.severity === 'high').length,
+                        medium: lastReceivedData.issues.filter(v => v.severity === 'medium').length,
+                        low: lastReceivedData.issues.filter(v => v.severity === 'low').length
+                    };
+                    updateVulnerabilityChart(vulnCounts);
+                }
+            }
+        });
+
+        // 折叠/展开卡片功能
+        function toggleCollapse(cardId) {
+            const card = document.getElementById(cardId);
+            card.classList.toggle('collapsed');
+        }
+
+        function updateSecurityScore(score) {
             const fullStars = Math.floor((score / 100) * 5); // 计算满星数量
             let starString = '';
             
             for (let i = 0; i < fullStars; i++) {
-                starString += '⭐️'; // 根据满星数量填充星星
+                starString += '⭐'; // 根据满星数量填充星星
             }
             
             document.getElementById('starRating').innerText = starString; // 更新星级评价
-            document.getElementById('scoreText').innerText = ` (${score}/100)`; // 更新分数显示
+            document.getElementById('securityScore').innerText = score; // 更新分数显示
+            
+            // 根据分数生成安全建议
+            updateSecuritySuggestion(score);
+        }
+        
+        function updateSecuritySuggestion(score) {
+            let suggestion = '';
+            if (score < 60) {
+                suggestion = '您的项目存在严重安全问题，需要立即修复高危和严重级别的漏洞，并对代码进行全面审计。建议优先处理未验证的用户输入和不安全的API调用。';
+            } else if (score < 75) {
+                suggestion = '项目安全性需要改进，请注意修复已发现的高危漏洞，并考虑引入安全开发流程。建议关注输入验证、认证机制和敏感数据处理。';
+            } else if (score < 90) {
+                suggestion = '项目安全性良好，建议继续修复中低危漏洞，并定期进行安全审计，保持代码质量。重点关注边界条件检查和异常处理机制。';
+            } else {
+                suggestion = '项目安全性优秀！继续保持良好的安全实践，建议设置定期安全检查流程，并关注最新的安全威胁动态。';
+            }
+            document.getElementById('securitySuggestion').textContent = suggestion;
         }
 
         function updateVulnerabilityChart(vulnerabilityNumber) {
-            const ctx = document.getElementById('vulnerabilityChart').getContext('2d');
-
-            // 如果图表已经存在，则销毁旧图表以避免重复渲染
-            if (window.myBarChart) {
-                window.myBarChart.destroy();
+            console.log("开始更新漏洞图表，数据:", JSON.stringify(vulnerabilityNumber));
+            
+            // 输入验证 - 确保vulnerabilityNumber包含必要的字段
+            if (!vulnerabilityNumber || typeof vulnerabilityNumber !== 'object') {
+                console.error("漏洞数据格式错误，期望对象类型，实际收到:", vulnerabilityNumber);
+                vulnerabilityNumber = { critical: 0, high: 0, medium: 0, low: 0 };
             }
-
-            window.myBarChart = new Chart(ctx, {
-                type: 'bar', // 使用 'bar' 类型，然后通过 options 设置为水平条形图
-                data: {
-                    labels: ['漏洞数目'], // 仅有一个标签，因为我们只绘制一个条目
+            
+            // 确保所有必要字段都存在且为数字
+            const safeData = {
+                critical: Number(vulnerabilityNumber.critical || 0),
+                high: Number(vulnerabilityNumber.high || 0),
+                medium: Number(vulnerabilityNumber.medium || 0),
+                low: Number(vulnerabilityNumber.low || 0)
+            };
+            
+            console.log("处理后的安全数据:", safeData);
+            
+            // 更新漏洞总数和细分文本（无论图表能否正常渲染）
+            const total = safeData.critical + safeData.high + safeData.medium + safeData.low;
+            document.getElementById('totalVulns').innerText = total;
+            document.getElementById('vulnBreakdown').innerText = 
+                `严重:${safeData.critical} 高:${safeData.high} 中:${safeData.medium} 低:${safeData.low}`;
+            
+            // 首先检查Canvas元素是否存在
+            const ctx = document.getElementById('vulnerabilityChart');
+            if (!ctx) {
+                console.error("找不到vulnerabilityChart画布元素!");
+                return;
+            }
+            
+            try {
+                // 重新设置Canvas尺寸
+                const parentWidth = ctx.parentElement.clientWidth - 16; // 减去padding
+                const parentHeight = ctx.parentElement.clientHeight - 16;
+                ctx.width = parentWidth;
+                ctx.height = parentHeight;
+                ctx.style.width = parentWidth + "px";
+                ctx.style.height = parentHeight + "px";
+                
+                console.log("Canvas尺寸:", ctx.width, ctx.height);
+                
+                const chartContext = ctx.getContext('2d');
+                if (!chartContext) {
+                    console.error("无法获取画布上下文!");
+                    return;
+                }
+    
+                // 如果图表已经存在，则销毁旧图表以避免重复渲染
+                if (window.myBarChart) {
+                    console.log("销毁旧图表");
+                    window.myBarChart.destroy();
+                    window.myBarChart = null;
+                }
+                
+                // 清空画布
+                chartContext.clearRect(0, 0, ctx.width, ctx.height);
+    
+                // 计算总数用于百分比显示
+                console.log("漏洞总数:", total);
+                
+                // 防止图表在没有数据时出错
+                if (total === 0) {
+                    // 没有漏洞数据时显示提示信息
+                    console.log("没有漏洞数据");
+                    chartContext.font = '14px Arial';
+                    chartContext.fillStyle = '#666';
+                    chartContext.textAlign = 'center';
+                    chartContext.fillText('暂无漏洞数据', ctx.width / 2, ctx.height / 2);
+                    return;
+                }
+    
+                const data = {
+                    labels: [''], // 仅有一个标签，因为我们只绘制一个条目
                     datasets: [
                         {
                             label: '严重',
@@ -91,91 +731,89 @@
                             stack: 'Stack 0', // 将数据集堆叠在一起
                         },
                     ]
-                },
-                options: {
-                    indexAxis: 'y', // 将 y 轴设置为主轴，使条形图水平显示
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        x: {
-                            stacked: true, // 启用 x 轴的堆叠
-                            beginAtZero: true,
-                            ticks: {
-                                precision: 0 // 避免小数点
-                            },
-                            grid: {
-                                display: false, // 隐藏 x 轴网格线
-                                // lineWidth: 0.2, // 设置 x 轴网格线宽度
-                            },
-                            border: {
-                                display:false,
-                                width: 0, // 设置 x 轴线宽度
-                            }
-                        },
-                        y: {
-                            stacked: true, // 启用 y 轴的堆叠
-                            offset: true,
-                            grid: {
-                                display: false, // 隐藏 x 轴网格线
-                                //lineWidth: 0.2, // 设置 x 轴网格线宽度
-                            },
-                            border: {
-                                display:false,
-                                width: 0, // 设置 x 轴线宽度
-                            }
-                        }
-                    },
+                };
+                
+                const options = {
+                    indexAxis: 'y',
                     plugins: {
                         legend: {
-                            position: 'right', // 将图例放在右侧
-                            labels: {
-                                boxWidth: 20, // 图例颜色块的宽度
-                                padding: 10, // 图例项之间的间距
-                            },
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.raw;
+                                    const percentage = ((value / total) * 100).toFixed(1);
+                                    return `${value} (${percentage}%)`;
+                                }
+                            }
                         },
                         datalabels: {
-                            anchor: 'center', // 数据标签显示在柱子中间
-                            align: 'center', // 数据标签居中对齐
-                            color: '#000000', // 数据标签颜色
+                            color: '#fff',
                             font: {
-                                size: 12, // 数据标签字体大小
-                                weight: 'bold', // 数据标签字体加粗
+                                weight: 'bold'
                             },
-                            formatter: (value) => {
-                                return value; // 直接显示数据值
+                            formatter: function(value, context) {
+                                return value > 0 ? `${value} ` : '';
                             },
-                            display:true,
+                            display: function(context) {
+                                return context.dataset.data[context.dataIndex] > 0;
+                            }
                         }
                     },
-                    layout: {
-                        padding: {
-                            right: 20, // 为图例留出右侧空间
+                    scales: {
+                        x: {
+                            display: false,
+                            beginAtZero: true,
+                            grid: {
+                                display: false
+                            },
+                        },
+                        y: {
+                            display: false,
+                            grid: {
+                                display: false
+                            },
                         }
                     },
-                    // 设置柱子宽度
-                    elements: {
-                        bar: {
-                            barThickness: 8, // 固定柱子宽度为 20 像素
-                            maxBarThickness: 20, // 最大柱子宽度
-                            minBarLength: 10, // 最小柱子长度
-                        }
-                    },
-                    barPercentage: 0.8, // 控制柱子的宽度比例
-                    categoryPercentage: 0.6, // 控制柱子的高度比例
-                }
-            });
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: {
+                        duration: 1000,
+                        easing: 'easeOutQuart'
+                    }
+                };
+    
+                // 创建图表
+                console.log("创建新图表");
+                window.myBarChart = new Chart(chartContext, {
+                    type: 'bar',
+                    data: data,
+                    options: options
+                });
+                
+                console.log("图表创建完成");
+            } catch (error) {
+                console.error("图表渲染出错:", error);
+                // 确保至少文本信息更新了
+                document.getElementById('totalVulns').innerText = total;
+                document.getElementById('vulnBreakdown').innerText = 
+                    `严重:${safeData.critical} 高:${safeData.high} 中:${safeData.medium} 低:${safeData.low}`;
+            }
         }
 
         function addVulnerability(vuln) {
             const listItem = document.createElement('li');
             listItem.className = 'vulnerability-item';
-            //处理message
-            const parts = vuln.message.split("\n");
-            let description = "";
-            let fix = "";
+            listItem.dataset.severity = vuln.severity;
+            
             // 分离描述和修复建议
             const descStart = vuln.message.indexOf("Description: ");
             const fixStart = vuln.message.indexOf("Recommendation: ");
+            
+            let title = vuln.message.split("\n")[0];
+            let description = "";
+            let fix = "";
 
             if (descStart !== -1) {
             description = vuln.message
@@ -190,46 +828,86 @@
             fix = vuln.message.slice(fixStart + "Recommendation: ".length).trim();
             }
 
-            // 创建一个容器来容纳严重性、标题和建议
-            const contentContainer = document.createElement('div');
-            contentContainer.className = 'content-container';
-            listItem.appendChild(contentContainer);
-
-
-            const titleContainer = document.createElement('div');
-            titleContainer.className = 'title-container';
-            contentContainer.appendChild(titleContainer);
-
             // 严重性点
             const severityDot = document.createElement('div');
             severityDot.className = `severity-dot ${vuln.severity}-severity`;
-            titleContainer.appendChild(severityDot);
+            listItem.appendChild(severityDot);
 
-            // 标题容器
-            const titleDiv = document.createElement('div');
-            titleDiv.className = 'title';
-            titleDiv.innerHTML = `<strong>${parts[0]}</strong><br> ${vuln.filename}:  ${vuln.line}行`;
-            titleContainer.appendChild(titleDiv);
-
-            // 建议容器
-            const suggestionDiv = document.createElement('div');
-            suggestionDiv.className = 'suggestion';
-            suggestionDiv.innerHTML = `<p class="fix-suggestion">${fix}</p>`;
-            contentContainer.appendChild(suggestionDiv);
+            // 内容容器
+            const contentContainer = document.createElement('div');
+            contentContainer.className = 'content-container';
+            
+            // 标题和文件信息
+            contentContainer.innerHTML = `
+                <div class="title">${title}</div>
+                <div class="file-info">${vuln.filename}:${vuln.line}</div>
+                <div class="collapsible-content" style="display: none">
+                    <div><strong>修复建议:</strong> ${fix}</div>
+                </div>
+            `;
+            
+            // 添加展开/收起按钮
+            const expandButton = document.createElement('button');
+            expandButton.className = 'expand-button';
+            expandButton.textContent = '详情';
+            expandButton.onclick = function(e) {
+                e.stopPropagation(); // 防止事件冒泡
+                const content = contentContainer.querySelector('.collapsible-content');
+                content.style.display = content.style.display === 'none' ? 'block' : 'none';
+                expandButton.textContent = content.style.display === 'none' ? '详情' : '收起';
+            };
+            contentContainer.appendChild(expandButton);
+            
+            listItem.appendChild(contentContainer);
 
             // 勾选框
             const checkbox = document.createElement('input');
             checkbox.type = 'checkbox';
             checkbox.className = 'item-checkbox';
-            listItem.appendChild(checkbox);  // 直接添加到 listItem 中，而不是 contentContainer
+            listItem.appendChild(checkbox);
 
-            document.getElementById('vulnerabilityList').appendChild(listItem);
+            return listItem;
         }
 
-        function updateVulnerabilityList(vulnerabilities,filename){
-            document.getElementById('vulnerabilityList').innerHTML = ''; // 清空列表，避免重复添加
-            // 添加所有漏洞条目
-            vulnerabilities.forEach((vuln) => addVulnerability(vuln, filename));
+        function updateVulnerabilityList(vulnerabilities) {
+            // 保存所有漏洞
+            allVulnerabilities = vulnerabilities;
+            
+            // 根据当前筛选条件刷新列表
+            filterVulnerabilities(document.getElementById('severityFilter').value);
+        }
+        
+        function filterVulnerabilities(severity) {
+            const list = document.getElementById('vulnerabilityList');
+            list.innerHTML = ''; // 清空列表
+            
+            // 筛选漏洞
+            let filteredVulns = allVulnerabilities;
+            if (severity !== 'all') {
+                filteredVulns = allVulnerabilities.filter(vuln => vuln.severity === severity);
+            }
+            
+            // 没有符合条件的漏洞时显示提示
+            if (filteredVulns.length === 0) {
+                const emptyItem = document.createElement('li');
+                emptyItem.textContent = '没有找到符合条件的漏洞';
+                emptyItem.style.textAlign = 'center';
+                list.appendChild(emptyItem);
+                return;
+            }
+            
+            // 添加漏洞到列表
+            filteredVulns.forEach(vuln => {
+                list.appendChild(addVulnerability(vuln));
+            });
+        }
+
+        // 初始化事件监听器
+        function initEventListeners() {
+            // 筛选下拉框变化事件
+            document.getElementById('severityFilter').addEventListener('change', function() {
+                filterVulnerabilities(this.value);
+            });
 
             // 全选/取消全选功能
             document.getElementById('selectAllCheckbox').addEventListener('change', function() {
@@ -237,64 +915,301 @@
                 checkboxes.forEach(cb => cb.checked = this.checked);
             });
 
-            // 一键修复功能（这里只是一个示例，实际逻辑需要根据需求实现）
+            // 修复按钮点击事件
             document.getElementById('repairButton').addEventListener('click', function() {
-                const selectedCheckboxes = document.querySelectorAll('.item-checkbox:checked');
-                if (selectedCheckboxes.length > 0) {
-                    alert('已选择 ' + selectedCheckboxes.length + ' 个漏洞进行修复！');
-                    // 实际修复逻辑应该在这里实现
+                const selectedItems = document.querySelectorAll('.item-checkbox:checked');
+                if (selectedItems.length > 0) {
+                    // 获取所有被选中项目的索引
+                    const selectedVulns = Array.from(selectedItems).map(checkbox => {
+                        const item = checkbox.closest('.vulnerability-item');
+                        return allVulnerabilities.find(v => 
+                            v.filename === item.querySelector('.file-info').textContent.split(':')[0] &&
+                            v.line.toString() === item.querySelector('.file-info').textContent.split(':')[1]
+                        );
+                    }).filter(Boolean);
+                    
+                    // 发送到VSCode进行修复
+                    vscode.postMessage({
+                        command: 'repair',
+                        vulnerabilities: selectedVulns
+                    });
                 } else {
-                    alert('请至少选择一个漏洞进行修复！');
+                    vscode.postMessage({
+                        command: 'showMessage',
+                        text: '请选择至少一个要修复的问题'
+                    });
                 }
+            });
+            
+            // 刷新按钮
+            document.getElementById('refreshButton').addEventListener('click', function() {
+                console.log("用户点击刷新按钮，发送refresh请求");
+                
+                // 显示加载状态
+                updateStatusBarMessage("正在刷新数据...");
+                
+                // 清空当前图表和数据
+                if (window.myBarChart) {
+                    window.myBarChart.destroy();
+                    window.myBarChart = null;
+                }
+                
+                // 显示加载中状态
+                document.getElementById('totalVulns').innerText = '加载中';
+                document.getElementById('vulnBreakdown').innerText = '加载中';
+                document.getElementById('securityScore').innerText = '...';
+                document.getElementById('starRating').innerText = '';
+                
+                // 发送刷新请求给VSCode扩展
+                vscode.postMessage({
+                    command: 'refresh',
+                    requestLatestData: true
+                });
+            });
+            
+            // LLM配置按钮
+            document.getElementById('changeLLMButton').addEventListener('click', function() {
+                vscode.postMessage({
+                    command: 'configureLLM'
+                });
+            });
+            
+            // 自动修复开关
+            document.getElementById('autoFixToggle').addEventListener('change', function() {
+                vscode.postMessage({
+                    command: 'setAutoFix',
+                    enabled: this.checked
+                });
+            });
+            
+            // 上传知识库文档
+            document.getElementById('uploadKnowledgeButton').addEventListener('click', function() {
+                vscode.postMessage({
+                    command: 'uploadKnowledge'
+                });
             });
         }
 
-        // 暂时不用
-        function loadData(){
-            const currentScore = 85;
-            const vulnerabilityNumber = {
-                high: 15, // 高危漏洞数量
-                medium: 25, // 中危漏洞数量
-                low: 60, // 低危漏洞数量
-            };
-            const vulnerabilities = [
-                { severity: 'high', title: 'SQL注入风险', line: 2, fileMapping:'example1.py',suggestion: '建议：对用户输入进行严格过滤...' },
-                { severity: 'medium', title: 'XSS攻击风险', line: 5, fileMapping:'example1.py',suggestion: '建议：对输出进行编码...' },
-                { severity: 'low', title: '信息泄露风险', line: 10,fileMapping:'example1.py', suggestion: '建议：限制敏感信息的访问...' },
-            ];
-
-            updateStarRating(currentScore);
-            updateVulnerabilityChart(vulnerabilityNumber);
-            updateVulnerabilityList(vulnerabilities);
+        // 更新LLM信息
+        function updateLLMInfo(llmInfo) {
+            document.getElementById('currentLLM').textContent = llmInfo.name;
+            document.getElementById('autoFixToggle').checked = llmInfo.autoFix;
+            document.getElementById('ragStatus').textContent = llmInfo.ragEnabled ? '已启用' : '已禁用';
+            
+            // 更新知识库列表
+            const knowledgeList = document.getElementById('knowledgeList');
+            knowledgeList.innerHTML = '';
+            
+            if (llmInfo.knowledgeFiles && llmInfo.knowledgeFiles.length > 0) {
+                llmInfo.knowledgeFiles.forEach(file => {
+                    const item = document.createElement('div');
+                    item.className = 'knowledge-item';
+                    item.innerHTML = `
+                        <i class="bi bi-file-text knowledge-icon"></i>
+                        <span>${file.name}</span>
+                    `;
+                    knowledgeList.appendChild(item);
+                });
+            } else {
+                const emptyItem = document.createElement('div');
+                emptyItem.className = 'knowledge-item';
+                emptyItem.innerHTML = '<span>暂无自定义知识库文档</span>';
+                knowledgeList.appendChild(emptyItem);
+            }
         }
 
-
-
         // 监听VS Code消息
-        window.addEventListener('message', event => {
-            const message = event.data;
-            switch (message.command) {
-                case 'refresh':
-                    console.log("收到来自vscode的讯息");
-                    // 直接使用传入的数据更新页面
-                    updateStarRating(message.score);
-                    updateVulnerabilityChart({
-                        critical: message.issues.filter(v => v.severity === 'critical').length,
-                        high: message.issues.filter(v => v.severity === 'high').length,
-                        medium: message.issues.filter(v => v.severity === 'medium').length,
-                        low: message.issues.filter(v => v.severity === 'low').length
-                    });
-                    updateVulnerabilityList(message.issues);
-                    break;
-                case 'gotoLine':
-                    gotoLine(message.line);
-                    break;
+        window.addEventListener('message', function(event) {
+            try {
+                const message = event.data;
+                console.log("收到WebView消息:", message);
+                
+                // 保存最后接收的数据用于调试
+                lastReceivedData = message;
+                
+                // 如果处于调试模式，显示接收到的数据
+                if (debugMode) {
+                    document.getElementById('debug-info').textContent = JSON.stringify(message).substring(0, 200) + '...';
+                    document.getElementById('debug-toolbar').style.display = 'block';
+                }
+                
+                switch (message.command) {
+                    case 'refresh':
+                        console.log("收到refresh消息，更新漏洞列表和评分");
+                        
+                        // 更新安全评分
+                        updateSecurityScore(message.score);
+                        
+                        // 计算并更新漏洞分布图表
+                        const vulnCounts = {
+                            critical: message.issues.filter(v => v.severity === 'critical').length,
+                            high: message.issues.filter(v => v.severity === 'high').length,
+                            medium: message.issues.filter(v => v.severity === 'medium').length,
+                            low: message.issues.filter(v => v.severity === 'low').length
+                        };
+                        console.log("计算的漏洞数量:", vulnCounts);
+                        
+                        // 更新漏洞列表
+                        updateVulnerabilityList(message.issues);
+                        
+                        // 更新LLM信息
+                        if (message.llmInfo) {
+                            updateLLMInfo(message.llmInfo);
+                        }
+                        
+                        // 发送确认消息回扩展
+                        vscode.postMessage({
+                            command: 'refreshComplete',
+                            success: true
+                        });
+                        break;
+                    
+                    case 'updateDashboard':
+                        console.log("收到updateDashboard消息，仅更新图表数据");
+                        
+                        // 直接更新各部分数据
+                        if (message.systemStatus) {
+                            updateSystemStatus(message.systemStatus);
+                        }
+                        
+                        if (message.vulnerabilityNumber) {
+                            console.log("更新漏洞图表数据:", message.vulnerabilityNumber);
+                            // 显示一个临时消息，提示正在更新
+                            updateStatusBarMessage("正在更新漏洞图表...");
+                            // 单独更新图表，不更新其他内容
+                            updateVulnerabilityChart(message.vulnerabilityNumber);
+                        }
+                        
+                        if (message.securityScore !== undefined) {
+                            updateSecurityScore(message.securityScore);
+                        }
+                        
+                        // 发送确认消息回扩展
+                        vscode.postMessage({
+                            command: 'updateDashboardComplete',
+                            success: true
+                        });
+                        break;
+                    
+                    case 'updateScore':
+                        console.log("收到updateScore消息，仅更新安全评分");
+                        // 只更新安全评分，不触发图表更新
+                        updateSecurityScore(message.score);
+                        break;
+                    
+                    case 'showRepairResult':
+                        // 处理修复结果
+                        vscode.postMessage({
+                            command: 'showMessage',
+                            text: `修复了 ${message.count} 个问题`
+                        });
+                        break;
+                    
+                    case 'updateLLM':
+                        // 更新LLM信息
+                        updateLLMInfo(message.llmInfo);
+                        break;
+                        
+                    default:
+                        console.log("收到未知命令:", message.command);
+                }
+            } catch (error) {
+                console.error("处理消息时出错:", error);
+                updateStatusBarMessage("消息处理错误: " + error.message);
             }
         });
 
-        
-        //loadData();   // 初始化加载数据
-        console.log("初始化完成");
+        // 页面加载完成初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log("页面加载完成，初始化仪表盘");
+            
+            try {
+                // 检查调试模式URL参数
+                const urlParams = new URLSearchParams(window.location.search);
+                debugMode = urlParams.has('debug');
+                if (debugMode) {
+                    document.getElementById('debug-toolbar').style.display = 'block';
+                    document.getElementById('debug-info').textContent = '调试模式已启用';
+                }
+                
+                // 初始化系统状态为加载中
+                const loadingStatus = {
+                    running: true,
+                    lastAnalysis: '加载中...',
+                    engineVersion: '加载中...'
+                };
+                
+                // 显示加载状态
+                updateSystemStatus(loadingStatus);
+                
+                // 不再自动初始化图表，等待扫描触发时更新
+                // updateVulnerabilityChart({
+                //     critical: 0,
+                //     high: 0,
+                //     medium: 0,
+                //     low: 0
+                // });
+                
+                // 初始化安全评分为暂无数据
+                // updateSecurityScore(0);
+                
+                // 初始化事件监听器
+                initEventListeners();
+                
+                // 向VSCode请求初始数据，但不自动刷新
+                console.log("等待触发漏洞扫描...");
+                // vscode.postMessage({
+                //     command: 'requestInitialData'
+                // });
+                
+                // 不再设置超时检查
+                // setTimeout(() => {
+                //     if (!lastReceivedData) {
+                //         console.warn("5秒内未收到初始数据");
+                //         updateStatusBarMessage("未收到数据，请尝试刷新");
+                //     }
+                // }, 5000);
+                
+            } catch (error) {
+                console.error("初始化仪表盘出错:", error);
+                updateStatusBarMessage("初始化错误: " + error.message);
+            }
+        });
+
+        function updateSystemStatus(status) {
+            // 目前仪表盘中没有显示系统状态的组件
+            // 可以在将来扩展此功能
+            console.log("系统状态更新:", status);
+        }
+
+        // 更新状态栏消息
+        function updateStatusBarMessage(message) {
+            // 创建或获取状态栏元素
+            let statusBar = document.getElementById('statusBar');
+            if (!statusBar) {
+                statusBar = document.createElement('div');
+                statusBar.id = 'statusBar';
+                statusBar.style.position = 'fixed';
+                statusBar.style.bottom = '0';
+                statusBar.style.left = '0';
+                statusBar.style.right = '0';
+                statusBar.style.backgroundColor = 'var(--card-bg)';
+                statusBar.style.color = 'var(--text-color)';
+                statusBar.style.padding = '5px 10px';
+                statusBar.style.fontSize = 'var(--font-small)';
+                statusBar.style.borderTop = '1px solid var(--border-color)';
+                statusBar.style.zIndex = '1000';
+                document.body.appendChild(statusBar);
+            }
+            
+            // 更新消息
+            statusBar.textContent = message;
+            
+            // 3秒后自动隐藏
+            setTimeout(() => {
+                statusBar.textContent = '';
+            }, 3000);
+        }
     </script>
 </body>
 </html>

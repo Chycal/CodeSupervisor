@@ -2,7 +2,7 @@
 
 一个为开发者提供实时编码安全建议的 VSCode 扩展，旨在帮助提高软件质量和安全性。该扩展结合了 Language Server Protocol (LSP) 和 AI 大语言模型 (LLM)，为多种编程语言提供智能安全检测和建议。
 
-![示意图](images/index.png)
+![示意图](images/index.jpg)
 
 ## 🚀 主要功能
 
